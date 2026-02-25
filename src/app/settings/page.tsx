@@ -120,6 +120,40 @@ export default function SettingsPage() {
     }
   };
 
+  const [debugInfo, setDebugInfo] = useState<any>(null);
+  const [checkingDebug, setCheckingDebug] = useState(false);
+
+  const handleCheckData = async () => {
+    setCheckingDebug(true);
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) return;
+
+      // Check Backend Data
+      const res = await fetch('/api/debug-data', {
+        headers: { 'Authorization': `Bearer ${session.access_token}` }
+      });
+      const backendData = await res.json();
+
+      // Check Frontend Data (RLS Check)
+      const { count: frontendSalesCount, error: rlsError } = await supabase
+        .from('session_sales')
+        .select('*', { count: 'exact', head: true });
+
+      setDebugInfo({
+        backend: backendData,
+        frontend: {
+          salesCount: frontendSalesCount,
+          rlsError: rlsError
+        }
+      });
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setCheckingDebug(false);
+    }
+  };
+
   const handleLogout = async () => {
     setLoggingOut(true);
     try {
@@ -299,6 +333,59 @@ export default function SettingsPage() {
                   <div className="text-gray-400 group-hover:text-purple-500 transition-colors">→</div>
                 </div>
               </button>
+
+               {/* Debug Data */}
+               <div className="h-px bg-gray-100 dark:bg-gray-700 mx-4 my-1" />
+               <button 
+                onClick={handleCheckData}
+                disabled={checkingDebug}
+                className="w-full text-left p-4 hover:bg-gray-50 dark:hover:bg-gray-700/50 rounded-2xl transition-colors group"
+              >
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-4">
+                    <div className="w-10 h-10 rounded-xl bg-blue-50 dark:bg-blue-900/20 flex items-center justify-center text-xl">
+                      🔍
+                    </div>
+                    <div>
+                      <div className="font-medium text-gray-900 dark:text-white">Cek Konsistensi Data</div>
+                      <div className="text-sm text-gray-500 dark:text-gray-400">
+                         {checkingDebug ? 'Memeriksa...' : 'Debug data sales & profit'}
+                      </div>
+                    </div>
+                  </div>
+                  <div className="text-gray-400 group-hover:text-purple-500 transition-colors">→</div>
+                </div>
+              </button>
+
+              {debugInfo && (
+                <div className="m-4 p-4 bg-gray-50 dark:bg-gray-900 rounded-xl text-xs font-mono overflow-auto max-h-60 border border-gray-200 dark:border-gray-700">
+                  <div className="mb-2 font-bold text-gray-700 dark:text-gray-300">Hasil Diagnosa:</div>
+                  <div className="grid grid-cols-2 gap-2 mb-2">
+                    <div>
+                      <span className="text-gray-500">Backend Sales:</span>
+                      <span className="ml-2 font-bold">{debugInfo.backend?.counts?.session_sales ?? '?'}</span>
+                    </div>
+                    <div>
+                      <span className="text-gray-500">Frontend Sales:</span>
+                      <span className="ml-2 font-bold text-blue-600">{debugInfo.frontend?.salesCount ?? '?'}</span>
+                    </div>
+                    <div>
+                      <span className="text-gray-500">Total Profit (DB):</span>
+                      <span className="ml-2 font-bold text-green-600">{formatIDR(debugInfo.backend?.financials?.total_profit_backend ?? 0)}</span>
+                    </div>
+                  </div>
+                  {debugInfo.frontend?.rlsError && (
+                    <div className="text-red-500 mb-2">
+                      RLS Error: {debugInfo.frontend.rlsError.message}
+                    </div>
+                  )}
+                  {debugInfo.backend?.counts?.session_sales !== debugInfo.frontend?.salesCount && (
+                    <div className="text-orange-500 mt-2 p-2 bg-orange-50 dark:bg-orange-900/20 rounded">
+                      ⚠️ Data tidak sinkron! Kemungkinan masalah permission (RLS) atau cache.
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
           </section>
 
