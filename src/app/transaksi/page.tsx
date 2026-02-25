@@ -32,34 +32,7 @@ export default function TransaksiPage() {
   // Actually, let's try to fetch ALL enriched txs using the RPC with high limit.
   const txs = enrichedTxs.length > 0 ? enrichedTxs : storeTxs;
 
-  useEffect(() => {
-    fetchAllSessions();
-    fetchEnrichedTransactions();
-  }, []);
-
-  const fetchEnrichedTransactions = async () => {
-    setIsLoading(true);
-    try {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) return;
-
-      // Fetch up to 1000 recent transactions with profit details
-      const { data, error } = await supabase.rpc('get_recent_activities', { 
-        target_user_id: user.id,
-        limit_count: 1000 
-      });
-
-      if (!error && data) {
-        setEnrichedTxs(data);
-      } else {
-        console.error("Failed to fetch enriched transactions", error);
-      }
-    } catch (err) {
-      console.error("Error fetching enriched transactions", err);
-    } finally {
-      setIsLoading(false);
-    }
-  };
+  // REMOVE DUPLICATE useEffect and fetchEnrichedTransactions here since I moved them up
   
   const handleRefresh = async () => {
     setIsRefreshing(true);
@@ -84,7 +57,37 @@ export default function TransaksiPage() {
   const [hiddenTxIds, setHiddenTxIds] = useState<Set<string>>(new Set());
   const pendingDeleteRef = useRef<{ ids: string[]; timeoutId: ReturnType<typeof setTimeout> } | null>(null);
 
-  const undoPendingDelete = () => {
+  useEffect(() => {
+    fetchAllSessions();
+    fetchEnrichedTransactions();
+  }, []);
+
+  const fetchEnrichedTransactions = async () => {
+    setIsLoading(true);
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+
+      // Fetch up to 1000 recent transactions with profit details
+      const { data, error } = await supabase.rpc('get_recent_activities', { 
+        target_user_id: user.id,
+        limit_count: 1000 
+      });
+
+      if (!error && data) {
+        setEnrichedTxs(data);
+      } else {
+        console.error("Failed to fetch enriched transactions", error);
+        // Show silent error to console, but maybe warn user if it's not a connection issue?
+        // Actually, if this fails, we just fallback to storeTxs.
+        // But let's log it clearly.
+      }
+    } catch (err) {
+      console.error("Error fetching enriched transactions", err);
+    } finally {
+      setIsLoading(false);
+    }
+  };
     const pending = pendingDeleteRef.current;
     if (!pending) return;
     clearTimeout(pending.timeoutId);

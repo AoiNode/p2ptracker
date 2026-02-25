@@ -70,7 +70,6 @@ DROP FUNCTION IF EXISTS get_recent_activities(uuid, integer);
 CREATE OR REPLACE FUNCTION get_recent_activities(target_user_id UUID, limit_count INTEGER DEFAULT 100)
 RETURNS TABLE (
     id UUID,
-    created_at TIMESTAMPTZ,
     tx_time TIMESTAMPTZ,
     type TEXT,
     price_idr NUMERIC,
@@ -87,7 +86,6 @@ BEGIN
     RETURN QUERY
     SELECT 
         t.id,
-        t.created_at,
         t.tx_time,
         t.type,
         t.price_idr,
