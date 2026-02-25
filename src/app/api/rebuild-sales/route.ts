@@ -186,29 +186,33 @@ export async function POST(req: NextRequest) {
     }
 
     // 8. Bulk Update sessions
-    // Supabase doesn't support bulk update with different values easily in one query
-    // So we loop. Since this is a repair script, performance is secondary to correctness.
-    let updatedCount = 0;
-    for (const session of sessions) {
+    // Using upsert for better performance
+    if (sessions.length > 0) {
       const { error: updateError } = await supabase
         .from('sessions')
-        .update({
-          remaining_usdt: session.remaining_usdt,
-          realized_profit_idr: session.realized_profit_idr,
-          status: session.status
-        })
-        .eq('id', session.id);
+        .upsert(
+          sessions.map(s => ({
+            id: s.id,
+            remaining_usdt: s.remaining_usdt,
+            realized_profit_idr: s.realized_profit_idr,
+            status: s.status,
+            user_id: s.user_id, // Important for RLS/constraint
+            total_invest_idr: s.total_invest_idr, // Required fields for upsert
+            total_usdt: s.total_usdt,
+            avg_cost: s.avg_cost,
+            created_at: s.created_at
+          }))
+        );
       
       if (updateError) {
-        console.error(`Failed to update session ${session.id}`, updateError);
-      } else {
-        updatedCount++;
+        console.error(`Failed to bulk update sessions`, updateError);
+        throw updateError;
       }
     }
 
     return NextResponse.json({
       success: true,
-      message: `Rebuild complete. Processed ${processedTxs.length} SELL txs. Created ${newSessionSales.length} sales records. Updated ${updatedCount} sessions.`,
+      message: `Rebuild complete. Processed ${processedTxs.length} SELL txs. Created ${newSessionSales.length} sales records. Updated ${sessions.length} sessions.`,
       stats: {
         totalSessions: sessions.length,
         totalSellTxs: sellTxs?.length || 0,

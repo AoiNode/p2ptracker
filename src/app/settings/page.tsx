@@ -7,6 +7,8 @@ import { useSessionStore } from "@/stores/useSessionStore";
 import { supabase } from "@/lib/supabaseClient";
 import { formatIDR } from "@/lib/utils";
 import { getButtonStyle } from "@/lib/buttonStyles";
+import ConfirmModal from "@/components/ConfirmModal";
+import PopupNotification from "@/components/PopupNotification";
 
 export default function SettingsPage() {
   const router = useRouter();
@@ -14,8 +16,13 @@ export default function SettingsPage() {
   const [showTargetModal, setShowTargetModal] = useState(false);
   const [showThemeModal, setShowThemeModal] = useState(false);
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
+  const [showFixConfirm, setShowFixConfirm] = useState(false);
   const [loggingOut, setLoggingOut] = useState(false);
   const [isFixing, setIsFixing] = useState(false);
+  const [fixResult, setFixResult] = useState<{show: boolean, type: 'success' | 'error', message: string}>({
+    show: false, type: 'success', message: ''
+  });
+  
   const targetMonthly = useSessionStore(s => s.targetMonthly);
   const setTargetMonthly = useSessionStore(s => s.setTargetMonthly);
   const [tempTarget, setTempTarget] = useState(targetMonthly.toString());
@@ -29,34 +36,74 @@ export default function SettingsPage() {
   };
 
   const handleFixProfit = async () => {
-    if (!confirm("Fitur ini akan menghitung ulang semua profit dari awal berdasarkan transaksi yang ada. Lanjutkan?")) return;
-    
     setIsFixing(true);
+    // Close modal immediately or keep it open with loading state?
+    // Let's keep modal open with loading state handled by ConfirmModal
+    
     try {
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) {
-        alert("Sesi tidak valid, silakan login ulang.");
+        setFixResult({
+          show: true,
+          type: 'error',
+          message: "Sesi tidak valid, silakan login ulang."
+        });
+        setIsFixing(false);
+        setShowFixConfirm(false);
         return;
       }
+
+      // Set timeout for fetch
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 60000); // 60 seconds timeout
 
       const res = await fetch('/api/rebuild-sales', {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${session.access_token}`
-        }
+        },
+        signal: controller.signal
       });
       
+      clearTimeout(timeoutId);
+      
       const result = await res.json();
-      if (result.success) {
-        alert(`Perbaikan selesai!\nProcessed: ${result.stats.processedTxs} transactions\nUpdated: ${result.stats.newSalesRecords} sales records`);
-        // Refresh data
-        window.location.reload();
-      } else {
-        alert("Gagal memperbaiki: " + result.error);
+      
+      if (!res.ok) {
+        throw new Error(result.error || `Server error: ${res.status}`);
       }
-    } catch (e) {
+
+      if (result.success) {
+        setShowFixConfirm(false);
+        setFixResult({
+          show: true,
+          type: 'success',
+          message: `Berhasil! ${result.stats.processedTxs} transaksi diproses & ${result.stats.newSalesRecords} record profit diperbarui.`
+        });
+        
+        // Refresh data after short delay
+        setTimeout(() => {
+          window.location.reload();
+        }, 3000);
+      } else {
+        throw new Error(result.error || "Gagal memperbaiki data");
+      }
+    } catch (e: any) {
       console.error(e);
-      alert("Terjadi kesalahan sistem");
+      setShowFixConfirm(false);
+      
+      let errorMsg = "Terjadi kesalahan sistem";
+      if (e.name === 'AbortError') {
+        errorMsg = "Waktu habis (Timeout). Data Anda mungkin terlalu banyak. Silakan coba lagi nanti atau hubungi developer.";
+      } else if (e.message) {
+        errorMsg = e.message;
+      }
+
+      setFixResult({
+        show: true,
+        type: 'error',
+        message: errorMsg
+      });
     } finally {
       setIsFixing(false);
     }
@@ -222,7 +269,7 @@ export default function SettingsPage() {
             <div className="bg-white dark:bg-gray-800 rounded-3xl p-2 shadow-sm border border-gray-100 dark:border-gray-700">
                {/* Fix Profit */}
                <button 
-                onClick={handleFixProfit}
+                onClick={() => setShowFixConfirm(true)}
                 disabled={isFixing}
                 className="w-full text-left p-4 hover:bg-gray-50 dark:hover:bg-gray-700/50 rounded-2xl transition-colors group disabled:opacity-50"
               >
@@ -234,11 +281,11 @@ export default function SettingsPage() {
                     <div>
                       <div className="font-medium text-gray-900 dark:text-white">Perbaiki Data Profit</div>
                       <div className="text-sm text-gray-500 dark:text-gray-400">
-                         {isFixing ? 'Sedang memperbaiki...' : 'Hitung ulang profit yang hilang'}
+                         Hitung ulang profit yang hilang
                       </div>
                     </div>
                   </div>
-                  {!isFixing && <div className="text-gray-400 group-hover:text-purple-500 transition-colors">→</div>}
+                  <div className="text-gray-400 group-hover:text-purple-500 transition-colors">→</div>
                 </div>
               </button>
             </div>
@@ -360,6 +407,27 @@ export default function SettingsPage() {
             </div>
           </div>
         )}
+
+        {/* Fix Confirmation Modal */}
+        <ConfirmModal
+          isOpen={showFixConfirm}
+          onClose={() => !isFixing && setShowFixConfirm(false)}
+          onConfirm={handleFixProfit}
+          title="Perbaiki Data Profit?"
+          message="Sistem akan menghitung ulang semua profit berdasarkan riwayat transaksi Anda. Proses ini aman dan dapat memperbaiki data yang hilang atau tidak sinkron."
+          confirmText="Mulai Perbaikan"
+          isLoading={isFixing}
+          type="warning"
+        />
+
+        {/* Result Notification */}
+        <PopupNotification
+          show={fixResult.show}
+          type={fixResult.type}
+          title={fixResult.type === 'success' ? 'Perbaikan Berhasil' : 'Gagal Memperbaiki'}
+          message={fixResult.message}
+          onClose={() => setFixResult(prev => ({ ...prev, show: false }))}
+        />
 
         {/* Target Modal */}
         {showTargetModal && (
