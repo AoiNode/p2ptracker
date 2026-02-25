@@ -80,7 +80,8 @@ RETURNS TABLE (
     label TEXT,
     profit_idr NUMERIC,
     status TEXT,
-    session_count BIGINT
+    session_count BIGINT,
+    session_details JSONB
 ) AS $$
 BEGIN
     RETURN QUERY
@@ -120,7 +121,25 @@ BEGIN
                 WHERE ss.tx_id = t.id
             )
             ELSE 0
-        END as session_count
+        END as session_count,
+        -- Get detailed session info for SELL transactions (FIFO breakdown)
+        CASE
+            WHEN t.type = 'SELL' THEN (
+                SELECT jsonb_agg(
+                    jsonb_build_object(
+                        'session_date', s.created_at,
+                        'sold_usdt', ss.sold_usdt,
+                        'avg_cost', s.avg_cost,
+                        'profit_idr', ss.profit_idr,
+                        'cost_idr', ss.cost_idr
+                    ) ORDER BY s.created_at ASC
+                )
+                FROM session_sales ss
+                JOIN sessions s ON ss.session_id = s.id
+                WHERE ss.tx_id = t.id
+            )
+            ELSE NULL
+        END as session_details
     FROM transactions t
     WHERE t.user_id = target_user_id
     ORDER BY t.tx_time DESC

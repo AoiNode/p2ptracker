@@ -17,6 +17,13 @@ export interface Transaction {
   profit_idr?: number;
   session_count?: number;
   status?: string;
+  session_details?: Array<{
+    session_date: string;
+    sold_usdt: number;
+    avg_cost: number;
+    profit_idr: number;
+    cost_idr: number;
+  }>;
 }
 
 // Session-based types (replacing BuyLot)

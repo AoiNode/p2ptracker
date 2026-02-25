@@ -707,9 +707,21 @@ function renderTransaction(
       totalProfit = t.profit_idr;
       totalCost = t.total_idr - totalProfit;
       hasSummary = true;
+      
+      // If we have detailed session breakdown from RPC, use it
+      if (t.session_details && t.session_details.length > 0) {
+        salesDetails = t.session_details.map(detail => ({
+          sessionDate: dayjs(detail.session_date).format('DD MMM'),
+          sessionDateRaw: new Date(detail.session_date),
+          usdt: detail.sold_usdt,
+          profit: detail.profit_idr,
+          cost: detail.cost_idr,
+          avgCost: detail.avg_cost
+        }));
+      }
     }
     
-    // 2. Fallback or use local data for details
+    // 2. Fallback to local data only if salesDetails is empty
     const allSalesForTx = sessionSales.filter(ss => ss.tx_id === t.id);
     
     // If no RPC data, calculate from local sales
@@ -727,8 +739,8 @@ function renderTransaction(
       }
     }
     
-    // Populate details if local data exists
-    if (allSalesForTx.length > 0) {
+    // Populate details if local data exists AND we haven't populated it from RPC yet
+    if (salesDetails.length === 0 && allSalesForTx.length > 0) {
       salesDetails = allSalesForTx.map(sale => {
         const session = sessions.find(s => s.id === sale.session_id);
         const sessionDate = session ? new Date(session.created_at) : new Date();
