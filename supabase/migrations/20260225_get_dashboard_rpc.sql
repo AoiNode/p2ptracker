@@ -63,6 +63,10 @@ $$ LANGUAGE plpgsql;
 
 -- Function to get recent activities with profit details (Server-side Join)
 -- This avoids fetching thousands of session_sales to client just to show "Profit: +Rp 50.000"
+
+-- Drop first because return type changed
+DROP FUNCTION IF EXISTS get_recent_activities(uuid, integer);
+
 CREATE OR REPLACE FUNCTION get_recent_activities(target_user_id UUID, limit_count INTEGER DEFAULT 20)
 RETURNS TABLE (
     id UUID,
