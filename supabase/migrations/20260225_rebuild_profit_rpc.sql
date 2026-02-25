@@ -20,20 +20,27 @@ DECLARE
     v_profit NUMERIC;
     
 BEGIN
-    -- 1. Reset all sessions for this user to initial state (safety first)
-    UPDATE sessions
-    SET remaining_usdt = total_usdt, realized_profit_idr = 0, status = 'active'
-    WHERE user_id = target_user_id;
-
-    -- 2. Delete all existing session_sales for this user
-    -- The trigger might add back amounts, but we just reset them above.
-    -- To ensure clean state, we reset AGAIN after delete.
+    -- 1. Disable session_sales triggers temporarily to avoid double counting during delete
+    -- Note: We can't easily disable triggers without superuser, so we have to be clever.
+    -- The issue is: deleting session_sales triggers 'restore_session_on_sale_delete' 
+    -- which adds back amounts to sessions.
+    
+    -- STRATEGY: 
+    -- 1. Delete all session_sales first (this will trigger restoration, adding back sold amounts)
+    -- 2. Force reset all sessions to their original state (total_usdt) just to be safe
+    
+    -- Step 1: Delete all existing session_sales for this user
     DELETE FROM session_sales
     WHERE session_id IN (SELECT id FROM sessions WHERE user_id = target_user_id);
     
-    -- 3. Reset sessions AGAIN to be absolutely sure (clean slate)
+    -- Step 2: Reset sessions to initial state (clean slate)
+    -- We set remaining_usdt = total_usdt because we just deleted all sales
+    -- This overwrites whatever the trigger might have done
     UPDATE sessions
-    SET remaining_usdt = total_usdt, realized_profit_idr = 0, status = 'active'
+    SET 
+        remaining_usdt = total_usdt, 
+        realized_profit_idr = 0, 
+        status = 'active'
     WHERE user_id = target_user_id;
 
     -- 4. Process SELL transactions (FIFO)
