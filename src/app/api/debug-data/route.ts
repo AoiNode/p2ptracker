@@ -43,7 +43,8 @@ export async function GET(req: NextRequest) {
     const { data: userSessions } = await supabase
       .from('sessions')
       .select('id')
-      .eq('user_id', user.id);
+      .eq('user_id', user.id)
+      .limit(10000); // Fix limit issue
       
     const sessionIds = userSessions?.map(s => s.id) || [];
     
@@ -57,7 +58,8 @@ export async function GET(req: NextRequest) {
       const { data: chunkSales, error: chunkError } = await supabase
         .from('session_sales')
         .select('*')
-        .in('session_id', chunk);
+        .in('session_id', chunk)
+        .limit(10000); // Fix limit issue
         
       if (chunkError) {
         userSalesError = chunkError;

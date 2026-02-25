@@ -11,6 +11,13 @@ type State = {
   buyLots: BuyLot[];
   sessionSales: SessionSale[];
   targetMonthly: number;
+  stats: {
+    totalProfit: number;
+    totalSalesVolume: number;
+    salesCount: number;
+    totalBuyVolume: number;
+    activeCapital: number;
+  };
 };
 
 type Actions = {
@@ -19,6 +26,7 @@ type Actions = {
   addSellSession: (session_id: string, price_idr: number, sold_usdt: number, dt?: Date, label?: ExchangeLabel) => Promise<void>;
   addSmartSell: (sold_usdt: number, price_idr: number, dt?: Date, fee?: number, feeType?: 'percent' | 'value', label?: ExchangeLabel) => Promise<void>;
   fetchAllSessions: () => Promise<void>;
+  fetchStats: () => Promise<void>;
   getActiveSessions: () => Session[];
   setTargetMonthly: (target: number) => Promise<void>;
 };
@@ -30,6 +38,35 @@ export const useSessionStore = create<State & Actions>((set, get) => ({
   lotMatches: [],
   buyLots: [],
   targetMonthly: 3000000,
+  stats: {
+    totalProfit: 0,
+    totalSalesVolume: 0,
+    salesCount: 0,
+    totalBuyVolume: 0,
+    activeCapital: 0
+  },
+  
+  fetchStats: async () => {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return;
+    
+    // Call RPC function for stats
+    const { data, error } = await supabase.rpc('get_user_stats', { target_user_id: user.id });
+    
+    if (!error && data) {
+      set({
+        stats: {
+          totalProfit: data.total_profit || 0,
+          totalSalesVolume: data.total_sales_volume || 0,
+          salesCount: data.sales_count || 0,
+          totalBuyVolume: data.total_buy_volume || 0,
+          activeCapital: data.active_capital || 0
+        }
+      });
+    } else {
+      console.warn("Failed to fetch server-side stats, using client-side fallback", error);
+    }
+  },
   
   setTargetMonthly: async (target: number) => {
     set({ targetMonthly: target });
@@ -403,6 +440,9 @@ export const useSessionStore = create<State & Actions>((set, get) => ({
       sessions: sessions || [],
       sessionSales: sales || []
     });
+    
+    // Also fetch stats for accuracy
+    await get().fetchStats();
   },
 
   getActiveSessions: () => {

@@ -12,6 +12,7 @@ export default function StatistikPage(){
   const txs = useSessionStore(s=>s.transactions);
   const sessions = useSessionStore(s=>s.sessions);
   const sessionSales = useSessionStore(s=>s.sessionSales);
+  const stats = useSessionStore(s=>s.stats); // Use stats from store
   const fetchAllSessions = useSessionStore(s=>s.fetchAllSessions);
   const { currentTheme, isDark } = useTheme();
   const [downloading, setDownloading] = useState(false);
@@ -23,6 +24,17 @@ export default function StatistikPage(){
   useEffect(() => {
     fetchAllSessions();
   }, [fetchAllSessions]);
+
+  // Use stats from RPC if available, otherwise fallback to client calculation
+  // Client calculation (fallback):
+  const clientTotalBuy = txs.filter(t => t.type === 'BUY').reduce((acc, t) => acc + t.total_idr, 0);
+  const clientTotalSell = txs.filter(t => t.type === 'SELL').reduce((acc, t) => acc + t.total_idr, 0);
+  const clientTotalProfit = sessionSales.reduce((acc, s) => acc + s.profit_idr, 0);
+  
+  // Use stats if non-zero (meaning RPC worked), otherwise client
+  const displayTotalProfit = stats.totalProfit !== 0 ? stats.totalProfit : clientTotalProfit;
+  const displayTotalBuy = stats.totalBuyVolume !== 0 ? stats.totalBuyVolume : clientTotalBuy;
+  const displayTotalSell = stats.totalSalesVolume !== 0 ? stats.totalSalesVolume : clientTotalSell;
 
   // Get available years from data
   const availableYears = Array.from(new Set([
@@ -88,9 +100,18 @@ export default function StatistikPage(){
       return monthA - monthB || dayA - dayB;
     });
 
-  const totalBuy = chartData.reduce((sum: number, d: any) => sum + d.buy, 0);
-  const totalSell = chartData.reduce((sum: number, d: any) => sum + d.sell, 0);
-  const totalProfit = chartData.reduce((sum: number, d: any) => sum + d.profit, 0);
+  // Calculate totals for selected year (chart only)
+  const chartTotalBuy = chartData.reduce((sum: number, d: any) => sum + d.buy, 0);
+  const chartTotalSell = chartData.reduce((sum: number, d: any) => sum + d.sell, 0);
+  const chartTotalProfit = chartData.reduce((sum: number, d: any) => sum + d.profit, 0);
+
+  // Determine what to display in cards
+  // If selected year is current year, show ALL TIME stats from RPC/Store
+  // If selected year is specific (past), show chart totals
+  const isCurrentYear = selectedYear === new Date().getFullYear();
+  const cardProfit = isCurrentYear ? displayTotalProfit : chartTotalProfit;
+  const cardBuy = isCurrentYear ? displayTotalBuy : chartTotalBuy;
+  const cardSell = isCurrentYear ? displayTotalSell : chartTotalSell;
 
   const handleDownloadCSV = (period: 'daily' | 'weekly' | 'monthly' | 'alltime') => {
     setShowModal(false);
@@ -335,20 +356,18 @@ export default function StatistikPage(){
         </div>
         
         {/* Summary Cards */}
-        <div className="grid grid-cols-2 gap-3 mb-4">
-          <div className="bg-white dark:bg-gray-800 rounded-2xl p-4 shadow-soft">
-            <div className="text-gray-500 dark:text-gray-400 text-sm">Total Beli</div>
-            <div className="text-xl font-bold text-gray-800 dark:text-white">{formatIDR(totalBuy)}</div>
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
+          <div className="p-5 bg-gradient-to-br from-green-500 to-green-600 rounded-3xl text-white shadow-lg shadow-green-500/20">
+            <div className="text-white/80 text-sm mb-1">Total Profit (Realized)</div>
+            <div className="text-3xl font-bold">{formatIDR(cardProfit)}</div>
           </div>
-          <div className="bg-white dark:bg-gray-800 rounded-2xl p-4 shadow-soft">
-            <div className="text-gray-500 dark:text-gray-400 text-sm">Total Jual</div>
-            <div className="text-xl font-bold text-gray-800 dark:text-white">{formatIDR(totalSell)}</div>
+          <div className="p-5 bg-white dark:bg-gray-800 rounded-3xl border border-gray-100 dark:border-gray-700 shadow-sm">
+            <div className="text-gray-500 dark:text-gray-400 text-sm mb-1">Volume Beli</div>
+            <div className="text-2xl font-bold text-gray-900 dark:text-white">{formatIDR(cardBuy)}</div>
           </div>
-          <div className="bg-white dark:bg-gray-800 rounded-2xl p-4 shadow-soft col-span-2">
-            <div className="text-gray-500 dark:text-gray-400 text-sm">Total Profit</div>
-            <div className={`text-xl font-bold ${totalProfit >= 0 ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}`}>
-              {formatIDR(totalProfit)}
-            </div>
+          <div className="p-5 bg-white dark:bg-gray-800 rounded-3xl border border-gray-100 dark:border-gray-700 shadow-sm">
+            <div className="text-gray-500 dark:text-gray-400 text-sm mb-1">Volume Jual</div>
+            <div className="text-2xl font-bold text-gray-900 dark:text-white">{formatIDR(cardSell)}</div>
           </div>
         </div>
 
