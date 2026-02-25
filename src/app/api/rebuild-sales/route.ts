@@ -55,11 +55,13 @@ export async function POST(req: NextRequest) {
     // 1. Get user from auth header or body (assuming called by logged in user)
     const authHeader = req.headers.get('Authorization');
     if (!authHeader) {
+      console.error('Rebuild failed: Missing Authorization header');
       return NextResponse.json({ error: 'Missing Authorization header' }, { status: 401 });
     }
 
     const { data: { user }, error: authError } = await supabase.auth.getUser(authHeader.replace('Bearer ', ''));
     if (authError || !user) {
+      console.error('Rebuild failed: Auth error', authError);
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
@@ -73,8 +75,12 @@ export async function POST(req: NextRequest) {
       .eq('user_id', userId)
       .order('created_at', { ascending: true });
 
-    if (sessionsError) throw sessionsError;
+    if (sessionsError) {
+      console.error('Rebuild failed: Error fetching sessions', sessionsError);
+      throw sessionsError;
+    }
     let sessions: Session[] = sessionsData || [];
+    console.log(`Fetched ${sessions.length} sessions`);
 
     // 3. Get all SELL transactions for this user
     const { data: sellTxs, error: txError } = await supabase
@@ -84,7 +90,11 @@ export async function POST(req: NextRequest) {
       .eq('type', 'SELL')
       .order('tx_time', { ascending: true });
 
-    if (txError) throw txError;
+    if (txError) {
+      console.error('Rebuild failed: Error fetching transactions', txError);
+      throw txError;
+    }
+    console.log(`Fetched ${sellTxs?.length} SELL transactions`);
 
     // 4. Delete existing session_sales for this user's sessions
     // Note: This might trigger 'restore_session_on_sale_delete' but we will override session values anyway
@@ -95,8 +105,12 @@ export async function POST(req: NextRequest) {
         .delete()
         .in('session_id', sessionIds);
       
-      if (deleteError) throw deleteError;
+      if (deleteError) {
+        console.error('Rebuild failed: Error deleting old sales', deleteError);
+        throw deleteError;
+      }
     }
+    console.log('Cleared existing session_sales');
 
     // 5. Reset sessions to initial state
     // We need to fetch fresh data if trigger modified them, OR just force overwrite
@@ -178,35 +192,62 @@ export async function POST(req: NextRequest) {
 
     // 7. Bulk Insert new session_sales
     if (newSessionSales.length > 0) {
+      console.log(`Inserting ${newSessionSales.length} sales records...`);
       const { error: insertError } = await supabase
         .from('session_sales')
         .insert(newSessionSales);
       
-      if (insertError) throw insertError;
+      if (insertError) {
+        console.error('Rebuild failed: Error inserting sales', insertError);
+        throw insertError;
+      }
     }
 
     // 8. Bulk Update sessions
-    // Using upsert for better performance
+    // Attempt upsert first, if fails fallback to loop update
     if (sessions.length > 0) {
-      const { error: updateError } = await supabase
-        .from('sessions')
-        .upsert(
-          sessions.map(s => ({
-            id: s.id,
-            remaining_usdt: s.remaining_usdt,
-            realized_profit_idr: s.realized_profit_idr,
-            status: s.status,
-            user_id: s.user_id, // Important for RLS/constraint
-            total_invest_idr: s.total_invest_idr, // Required fields for upsert
-            total_usdt: s.total_usdt,
-            avg_cost: s.avg_cost,
-            created_at: s.created_at
-          }))
-        );
-      
-      if (updateError) {
-        console.error(`Failed to bulk update sessions`, updateError);
-        throw updateError;
+      console.log(`Updating ${sessions.length} sessions...`);
+      try {
+        const { error: updateError } = await supabase
+          .from('sessions')
+          .upsert(
+            sessions.map(s => ({
+              id: s.id,
+              remaining_usdt: s.remaining_usdt,
+              realized_profit_idr: s.realized_profit_idr,
+              status: s.status,
+              user_id: s.user_id,
+              total_invest_idr: s.total_invest_idr,
+              total_usdt: s.total_usdt,
+              avg_cost: s.avg_cost,
+              created_at: s.created_at
+            }))
+          );
+        
+        if (updateError) throw updateError;
+        console.log('Session bulk update successful');
+      } catch (upsertError) {
+        console.warn('Bulk upsert failed, falling back to sequential update:', upsertError);
+        
+        // Fallback: Sequential update
+        let updatedCount = 0;
+        for (const session of sessions) {
+          const { error: seqError } = await supabase
+            .from('sessions')
+            .update({
+              remaining_usdt: session.remaining_usdt,
+              realized_profit_idr: session.realized_profit_idr,
+              status: session.status
+            })
+            .eq('id', session.id);
+            
+          if (seqError) {
+             console.error(`Failed to update session ${session.id}`, seqError);
+          } else {
+             updatedCount++;
+          }
+        }
+        console.log(`Sequential update finished. Updated ${updatedCount}/${sessions.length} sessions.`);
       }
     }
 
