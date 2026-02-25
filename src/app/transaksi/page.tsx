@@ -88,6 +88,8 @@ export default function TransaksiPage() {
       setIsLoading(false);
     }
   };
+
+  const undoPendingDelete = () => {
     const pending = pendingDeleteRef.current;
     if (!pending) return;
     clearTimeout(pending.timeoutId);
@@ -812,16 +814,19 @@ function renderTransaction(
             
             {/* FIFO Details for SELL */}
             {salesDetails.length > 0 && (
-              <div className="bg-gray-50 dark:bg-gray-900/50 rounded-lg p-2 space-y-1.5">
+              <div className="bg-gray-50 dark:bg-gray-900/50 rounded-lg p-2 space-y-1.5 w-full">
                 <p className="text-[10px] font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-1">Sumber Aset (FIFO)</p>
                 {salesDetails.map((detail, idx) => (
-                  <div key={idx} className="flex justify-between items-center text-[10px] text-gray-600 dark:text-gray-400">
+                  <div key={idx} className="flex justify-between items-center text-[10px] text-gray-600 dark:text-gray-400 border-b border-gray-100 dark:border-gray-800 last:border-0 pb-1 last:pb-0">
                     <div className="flex items-center gap-1.5">
-                      <div className="w-1 h-1 rounded-full bg-purple-400"></div>
+                      <div className="w-1.5 h-1.5 rounded-full bg-purple-400"></div>
                       <span>Beli {detail.sessionDate}</span>
                     </div>
-                    <div className="font-mono opacity-80">
-                      {detail.usdt.toFixed(2)} USDT <span className="text-gray-300 dark:text-gray-600">@</span> {detail.avgCost.toLocaleString('id-ID')}
+                    <div className="flex flex-col items-end">
+                       <span className="font-mono">{detail.usdt.toFixed(2)} USDT <span className="text-gray-300 dark:text-gray-600">@</span> {detail.avgCost.toLocaleString('id-ID')}</span>
+                       <span className={`${detail.profit >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                         {detail.profit >= 0 ? '+' : ''}{formatIDR(detail.profit)}
+                       </span>
                     </div>
                   </div>
                 ))}
