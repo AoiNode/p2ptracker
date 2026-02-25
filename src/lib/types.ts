@@ -13,6 +13,10 @@ export interface Transaction {
   fee_idr: number;
   session_id?: string;
   label?: ExchangeLabel;
+  // Enriched fields from RPC
+  profit_idr?: number;
+  session_count?: number;
+  status?: string;
 }
 
 // Session-based types (replacing BuyLot)

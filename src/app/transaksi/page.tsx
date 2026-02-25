@@ -10,16 +10,63 @@ import { RefreshCw, ChevronRight, Trash2, ListChecks, X, Filter, Calendar, Searc
 import { Toast, useToast } from "@/components/Toast";
 import TransactionDetailPopup from "@/components/TransactionDetailPopup";
 import { deleteTransaction } from "@/lib/transactionService";
+import { supabase } from "@/lib/supabaseClient";
 
 export default function TransaksiPage() {
   const router = useRouter();
-  const txs = useSessionStore(s => s.transactions);
+  const storeTxs = useSessionStore(s => s.transactions); // Rename to storeTxs
   const sessions = useSessionStore(s => s.sessions);
   const sessionSales = useSessionStore(s => s.sessionSales);
   const fetchAllSessions = useSessionStore(s => s.fetchAllSessions);
   
+  // Local state for enriched transactions
+  const [enrichedTxs, setEnrichedTxs] = useState<Transaction[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [showFilters, setShowFilters] = useState(false);
+  
+  // Use enrichedTxs if available, otherwise fallback to storeTxs
+  // We need to merge them because enrichedTxs might be limited (e.g. recent 100)
+  // while storeTxs has everything but no profit details.
+  // Actually, let's try to fetch ALL enriched txs using the RPC with high limit.
+  const txs = enrichedTxs.length > 0 ? enrichedTxs : storeTxs;
+
+  useEffect(() => {
+    fetchAllSessions();
+    fetchEnrichedTransactions();
+  }, []);
+
+  const fetchEnrichedTransactions = async () => {
+    setIsLoading(true);
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+
+      // Fetch up to 1000 recent transactions with profit details
+      const { data, error } = await supabase.rpc('get_recent_activities', { 
+        target_user_id: user.id,
+        limit_count: 1000 
+      });
+
+      if (!error && data) {
+        setEnrichedTxs(data);
+      } else {
+        console.error("Failed to fetch enriched transactions", error);
+      }
+    } catch (err) {
+      console.error("Error fetching enriched transactions", err);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+  
+  const handleRefresh = async () => {
+    setIsRefreshing(true);
+    await fetchAllSessions();
+    await fetchEnrichedTransactions();
+    setIsRefreshing(false);
+  };
   
   // Filters
   const [selectedFilter, setSelectedFilter] = useState<ExchangeLabel | 'All'>('All');
@@ -141,12 +188,6 @@ export default function TransaksiPage() {
     scheduleDelete(Array.from(selectedTxIds));
     setIsSelectionMode(false);
     setSelectedTxIds(new Set());
-  };
-
-  const handleRefresh = async () => {
-    setIsRefreshing(true);
-    await fetchAllSessions();
-    setTimeout(() => setIsRefreshing(false), 500);
   };
 
   useEffect(() => { 
@@ -652,13 +693,37 @@ function renderTransaction(
       sessionInfo = `Sisa: ${session.remaining_usdt.toFixed(2)} USDT`;
     }
   } else if (t.type === 'SELL' && t.id) {
+    let totalProfit = 0;
+    let totalCost = 0;
+    let hasSummary = false;
+
+    // 1. Try to use enriched data from RPC (Server-side source of truth)
+    if (t.profit_idr !== undefined) {
+      totalProfit = t.profit_idr;
+      totalCost = t.total_idr - totalProfit;
+      hasSummary = true;
+    }
+    
+    // 2. Fallback or use local data for details
     const allSalesForTx = sessionSales.filter(ss => ss.tx_id === t.id);
-    if (allSalesForTx.length > 0) {
-      const totalProfit = allSalesForTx.reduce((sum, sale) => sum + sale.profit_idr, 0);
-      const totalCost = allSalesForTx.reduce((sum, sale) => sum + sale.cost_idr, 0);
+    
+    // If no RPC data, calculate from local sales
+    if (!hasSummary && allSalesForTx.length > 0) {
+      totalProfit = allSalesForTx.reduce((sum, sale) => sum + sale.profit_idr, 0);
+      totalCost = allSalesForTx.reduce((sum, sale) => sum + sale.cost_idr, 0);
+      hasSummary = true;
+    }
+
+    if (hasSummary) {
       const profitPercent = totalCost > 0 ? (totalProfit / totalCost * 100).toFixed(2) : '0';
       sessionInfo = `Profit: ${formatIDR(totalProfit)} (${profitPercent}%)`;
-      
+      if (t.session_count && t.session_count > 0) {
+        sessionInfo += ` • ${t.session_count} Sesi`;
+      }
+    }
+    
+    // Populate details if local data exists
+    if (allSalesForTx.length > 0) {
       salesDetails = allSalesForTx.map(sale => {
         const session = sessions.find(s => s.id === sale.session_id);
         const sessionDate = session ? new Date(session.created_at) : new Date();

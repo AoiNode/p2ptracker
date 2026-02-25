@@ -67,14 +67,18 @@ $$ LANGUAGE plpgsql;
 -- Drop first because return type changed
 DROP FUNCTION IF EXISTS get_recent_activities(uuid, integer);
 
-CREATE OR REPLACE FUNCTION get_recent_activities(target_user_id UUID, limit_count INTEGER DEFAULT 20)
+CREATE OR REPLACE FUNCTION get_recent_activities(target_user_id UUID, limit_count INTEGER DEFAULT 100)
 RETURNS TABLE (
     id UUID,
+    created_at TIMESTAMPTZ,
     tx_time TIMESTAMPTZ,
     type TEXT,
     price_idr NUMERIC,
     amount_usdt NUMERIC,
     total_idr NUMERIC,
+    fee_idr NUMERIC,
+    session_id UUID,
+    label TEXT,
     profit_idr NUMERIC,
     status TEXT,
     session_count BIGINT
@@ -83,11 +87,15 @@ BEGIN
     RETURN QUERY
     SELECT 
         t.id,
+        t.created_at,
         t.tx_time,
         t.type,
         t.price_idr,
         t.amount_usdt,
         t.total_idr,
+        t.fee_idr,
+        t.session_id,
+        t.label,
         -- Calculate profit for SELL transactions
         CASE 
             WHEN t.type = 'SELL' THEN (
