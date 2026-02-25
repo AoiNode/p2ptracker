@@ -111,30 +111,32 @@ export default function ProfitCard(props: {
       <div className="mt-4 animate-fade-in" style={{ animationDelay: '0.7s' }}>
         <div className="text-white/80 text-sm mb-2 flex justify-between">
           <span>Target Bulanan</span>
-          <span className="font-semibold">{formatIDR(targetBulanan)}</span>
+          <span className="font-semibold text-white drop-shadow-md">{formatIDR(targetBulanan)}</span>
         </div>
-        <div className="w-full h-3 bg-white/20 rounded-full overflow-hidden relative">
+        <div className="w-full h-4 bg-black/20 dark:bg-white/10 rounded-full overflow-hidden relative backdrop-blur-sm border border-white/5">
           <div 
-            className={`h-3 rounded-full transition-all duration-1000 ease-out relative ${
+            className={`h-full rounded-full transition-all duration-1000 ease-out relative flex items-center justify-end px-2 ${
               currentTheme.progressStyle === 'striped' ? 'bg-striped' :
-              currentTheme.progressStyle === 'glow' ? 'shadow-glow' : ''
+              currentTheme.progressStyle === 'glow' ? 'shadow-[0_0_15px_rgba(255,255,255,0.5)]' : ''
             }`}
             style={{ 
               width: `${Math.max(0, Math.min(100, animatedProgress))}%`,
-              background: currentTheme.progressStyle === 'gradient' || currentTheme.progressStyle === 'glow' 
-                ? 'var(--gradient-success)' 
-                : 'var(--color-success)'
+              background: currentTheme.colors.success // Use solid color for better contrast control
             }}
           >
-            {currentTheme.progressStyle === 'simple' ? null : (
-              <div className="absolute inset-0 bg-white/30 shimmer" />
+             {currentTheme.progressStyle !== 'simple' && (
+              <div className="absolute inset-0 bg-gradient-to-r from-transparent to-white/20" />
             )}
+          </div>
+          {/* Percentage Text overlay - centered if progress is low, inside bar if high */}
+          <div className="absolute inset-0 flex items-center justify-center text-[10px] font-bold text-white drop-shadow-md pointer-events-none">
+             {animatedProgress.toFixed(1)}%
           </div>
         </div>
         <div className="text-white/80 text-xs mt-2 flex justify-between">
-          <span>{animatedProgress.toFixed(1)}% tercapai</span>
-          <span className={animatedProgress >= 100 ? "text-emerald-300" : "text-white/60"}>
-            {animatedProgress >= 100 ? "✨ Target Tercapai!" : `Sisa ${(100 - animatedProgress).toFixed(1)}%`}
+          <span>{animatedProgress >= 100 ? "Luar Biasa!" : "Tetap Semangat!"}</span>
+          <span className={`font-medium ${animatedProgress >= 100 ? "text-emerald-300" : "text-white/90"}`}>
+            {animatedProgress >= 100 ? "✨ Target Tercapai!" : `Kurang ${(100 - animatedProgress).toFixed(1)}%`}
           </span>
         </div>
       </div>

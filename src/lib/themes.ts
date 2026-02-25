@@ -201,70 +201,202 @@ export const themes: Record<string, ThemeConfig> = {
       profitDark: '#93c5fd', // blue-300
     },
   },
-  forest: {
-    id: 'forest',
-    name: 'Forest Green',
-    description: 'Tema hijau hutan yang natural dan segar',
-    icon: '🌲',
+  cyberpunk: {
+    id: 'cyberpunk',
+    name: 'Neon Cyberpunk',
+    description: 'Tema futuristik dengan aksen neon yang menyala',
+    icon: '⚡',
     icons: {
-      home: '🌿',
+      home: '🏠',
       transaction: '💸',
-      session: '🌳',
-      statistic: '📊',
+      session: '📊',
+      statistic: '📉',
       settings: '⚙️',
-      profit: '🌱',
-      loss: '🍂',
-      neutral: '🍃',
-      buy: '🟩',
-      sell: '🟢',
+      profit: '💹',
+      loss: '🔻',
+      neutral: '⏸️',
+      buy: '🛒',
+      sell: '💰',
       target: '🎯',
-      theme: '🌲',
+      theme: '🎨',
       darkMode: '🌙',
-      logout: '🍃',
-      installApp: '📲',
+      logout: '🚪',
+      installApp: '📱',
     },
     chartType: 'line',
+    buttonStyle: 'sharp',
+    progressStyle: 'glow',
+    colors: {
+      primary: '#f472b6', // pink-400
+      primaryDark: '#db2777', // pink-600
+      secondary: '#22d3ee', // cyan-400
+      secondaryDark: '#0891b2', // cyan-600
+      accent: '#a855f7', // purple-500
+      accentDark: '#7e22ce', // purple-700
+      success: '#4ade80', // green-400
+      successDark: '#16a34a', // green-600
+      danger: '#f87171', // red-400
+      dangerDark: '#dc2626', // red-600
+      warning: '#facc15', // yellow-400
+      warningDark: '#ca8a04', // yellow-600
+      background: '#0f172a', // slate-900 (Dark by default)
+      backgroundDark: '#020617', // slate-950
+      surface: '#1e293b', // slate-800
+      surfaceDark: '#0f172a', // slate-900
+      text: '#e2e8f0', // slate-200
+      textDark: '#f1f5f9', // slate-100
+      textMuted: '#94a3b8', // slate-400
+      textMutedDark: '#64748b', // slate-500
+      border: '#334155', // slate-700
+      borderDark: '#1e293b', // slate-800
+    },
+    gradients: {
+      primary: 'linear-gradient(135deg, #ec4899, #8b5cf6)',
+      primaryDark: 'linear-gradient(135deg, #be185d, #6d28d9)',
+      accent: 'linear-gradient(135deg, #22d3ee, #3b82f6)',
+      accentDark: 'linear-gradient(135deg, rgba(34, 211, 238, 0.2), rgba(59, 130, 246, 0.2))',
+      success: 'linear-gradient(135deg, #4ade80, #22c55e)',
+      successDark: 'linear-gradient(135deg, #22c55e, #15803d)',
+    },
+    chartColors: {
+      buy: '#f472b6',
+      sell: '#22d3ee',
+      profit: '#a855f7',
+      buyDark: '#f472b6',
+      sellDark: '#22d3ee',
+      profitDark: '#a855f7',
+    },
+  },
+  luxury: {
+    id: 'luxury',
+    name: 'Luxury Gold',
+    description: 'Tema elegan dengan sentuhan emas dan hitam',
+    icon: '👑',
+    icons: {
+      home: '🏛️',
+      transaction: '💳',
+      session: '📑',
+      statistic: '📈',
+      settings: '⚙️',
+      profit: '💎',
+      loss: '🔻',
+      neutral: '➖',
+      buy: '📥',
+      sell: '📤',
+      target: '🎯',
+      theme: '🎨',
+      darkMode: '🌑',
+      logout: '🚪',
+      installApp: '📱',
+    },
+    chartType: 'bar',
+    buttonStyle: 'rounded',
+    progressStyle: 'gradient',
+    colors: {
+      primary: '#d4af37', // Gold
+      primaryDark: '#b4941f', // Dark Gold
+      secondary: '#1a1a1a', // Black
+      secondaryDark: '#000000', // Deep Black
+      accent: '#d4af37',
+      accentDark: '#b4941f',
+      success: '#10b981', // emerald-500
+      successDark: '#059669', // emerald-600
+      danger: '#ef4444', // red-500
+      dangerDark: '#dc2626', // red-600
+      warning: '#f59e0b', // amber-500
+      warningDark: '#d97706', // amber-600
+      background: '#fafafa', // neutral-50
+      backgroundDark: '#171717', // neutral-900
+      surface: '#ffffff',
+      surfaceDark: '#262626', // neutral-800
+      text: '#171717', // neutral-900
+      textDark: '#e5e5e5', // neutral-200
+      textMuted: '#737373', // neutral-500
+      textMutedDark: '#525252', // neutral-600
+      border: '#e5e5e5', // neutral-200
+      borderDark: '#404040', // neutral-700
+    },
+    gradients: {
+      primary: 'linear-gradient(135deg, #d4af37, #f3e5ab)',
+      primaryDark: 'linear-gradient(135deg, #b4941f, #d4af37)',
+      accent: 'linear-gradient(135deg, #1a1a1a, #404040)',
+      accentDark: 'linear-gradient(135deg, rgba(212, 175, 55, 0.2), rgba(243, 229, 171, 0.2))',
+      success: 'linear-gradient(135deg, #10b981, #34d399)',
+      successDark: 'linear-gradient(135deg, #059669, #10b981)',
+    },
+    chartColors: {
+      buy: '#ef4444',
+      sell: '#10b981',
+      profit: '#d4af37',
+      buyDark: '#f87171',
+      sellDark: '#34d399',
+      profitDark: '#fcd34d',
+    },
+  },
+  forest: {
+    id: 'forest',
+    name: 'Deep Forest',
+    description: 'Tema alam dengan nuansa hijau yang segar',
+    icon: '🌲',
+    icons: {
+      home: '🏡',
+      transaction: '💸',
+      session: '📝',
+      statistic: '📊',
+      settings: '⚙️',
+      profit: '🌲',
+      loss: '🍂',
+      neutral: '🍃',
+      buy: '🍄',
+      sell: '🌲',
+      target: '🎯',
+      theme: '🎨',
+      darkMode: '🌑',
+      logout: '🚪',
+      installApp: '📱',
+    },
+    chartType: 'area',
     buttonStyle: 'rounded',
     progressStyle: 'striped',
     colors: {
-      primary: 'rgb(34, 197, 94)', // green-500
-      primaryDark: 'rgb(74, 222, 128)', // green-400
-      secondary: 'rgb(16, 185, 129)', // emerald-500
-      secondaryDark: 'rgb(52, 211, 153)', // emerald-400
-      accent: 'rgb(34, 197, 94)',
-      accentDark: 'rgb(74, 222, 128)',
-      success: 'rgb(34, 197, 94)',
-      successDark: 'rgb(74, 222, 128)',
-      danger: 'rgb(239, 68, 68)',
-      dangerDark: 'rgb(248, 113, 113)',
-      warning: 'rgb(245, 158, 11)',
-      warningDark: 'rgb(251, 191, 36)',
-      background: 'rgb(240, 253, 244)', // green-50
-      backgroundDark: 'rgb(20, 83, 45)', // green-900
-      surface: 'rgb(255, 255, 255)',
-      surfaceDark: 'rgb(22, 101, 52)', // green-800
-      text: 'rgb(20, 83, 45)', // green-900
-      textDark: 'rgb(255, 255, 255)',
-      textMuted: 'rgb(107, 114, 128)',
-      textMutedDark: 'rgb(156, 163, 175)',
-      border: 'rgb(187, 247, 208)', // green-200
-      borderDark: 'rgb(22, 163, 74)', // green-600
+      primary: '#15803d', // green-700
+      primaryDark: '#166534', // green-800
+      secondary: '#a3e635', // lime-400
+      secondaryDark: '#84cc16', // lime-500
+      accent: '#15803d',
+      accentDark: '#166534',
+      success: '#22c55e', // green-500
+      successDark: '#16a34a', // green-600
+      danger: '#ef4444', // red-500
+      dangerDark: '#dc2626', // red-600
+      warning: '#eab308', // yellow-500
+      warningDark: '#ca8a04', // yellow-600
+      background: '#f0fdf4', // green-50
+      backgroundDark: '#052e16', // green-950
+      surface: '#ffffff',
+      surfaceDark: '#14532d', // green-900
+      text: '#064e3b', // green-900
+      textDark: '#f0fdf4', // green-50
+      textMuted: '#166534', // green-800
+      textMutedDark: '#86efac', // green-300
+      border: '#bbf7d0', // green-200
+      borderDark: '#14532d', // green-900
     },
     gradients: {
-      primary: 'linear-gradient(135deg, rgb(34, 197, 94), rgb(16, 185, 129))',
-      primaryDark: 'linear-gradient(135deg, rgb(74, 222, 128), rgb(52, 211, 153))',
-      accent: 'linear-gradient(135deg, rgb(220, 252, 231), rgb(209, 250, 229))',
-      accentDark: 'linear-gradient(135deg, rgba(34, 197, 94, 0.2), rgba(16, 185, 129, 0.2))',
-      success: 'linear-gradient(135deg, rgb(34, 197, 94), rgb(74, 222, 128))',
-      successDark: 'linear-gradient(135deg, rgb(74, 222, 128), rgb(134, 239, 172))',
+      primary: 'linear-gradient(135deg, #15803d, #4ade80)',
+      primaryDark: 'linear-gradient(135deg, #166534, #22c55e)',
+      accent: 'linear-gradient(135deg, #a3e635, #bef264)',
+      accentDark: 'linear-gradient(135deg, rgba(21, 128, 61, 0.2), rgba(74, 222, 128, 0.2))',
+      success: 'linear-gradient(135deg, #22c55e, #86efac)',
+      successDark: 'linear-gradient(135deg, #16a34a, #4ade80)',
     },
     chartColors: {
-      buy: '#f87171', // red-400
-      sell: '#4ade80', // green-400
-      profit: '#34d399', // emerald-400
-      buyDark: '#fca5a5', // red-300
-      sellDark: '#86efac', // green-300
-      profitDark: '#6ee7b7', // emerald-300
+      buy: '#ef4444',
+      sell: '#22c55e',
+      profit: '#a3e635',
+      buyDark: '#f87171',
+      sellDark: '#4ade80',
+      profitDark: '#bef264',
     },
   },
   sunset: {
