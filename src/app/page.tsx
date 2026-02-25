@@ -19,18 +19,36 @@ const InstallPWA = dynamic(() => import("@/components/InstallPWA"), { ssr: false
 export default function HomePage(){
   const { user } = useAuth();
   const fetchAllSessions = useSessionStore(s => s.fetchAllSessions);
+  const fetchStats = useSessionStore(s => s.fetchStats);
   const sessions = useSessionStore(s => s.sessions);
   const transactions = useSessionStore(s => s.transactions);
+  const stats = useSessionStore(s => s.stats); // Use server-side stats
   const s = computeSessionDashboard();
   
   useEffect(() => {
     if (user) {
       fetchAllSessions();
+      fetchStats(); // Ensure stats are fetched
     }
-  }, [user, fetchAllSessions]);
+  }, [user, fetchAllSessions, fetchStats]);
 
   const activeSessionsCount = sessions.filter(sess => sess.status === 'active').length;
-
+  
+  // Use server-side stats for Dashboard if available
+  const dashboardMonthlyPL = stats.totalProfit > 0 ? stats.totalProfit : s.monthlyPL;
+  // Note: monthlyPL in store might be total profit, need to check if it's filtered by month
+  // Actually s.monthlyPL is calculated in computeSessionDashboard based on current month
+  // But stats.totalProfit is ALL TIME.
+  // We need daily stats for monthly filtering in dashboard too.
+  
+  // For now, let's trust s.monthlyPL because it filters by month in client side correctly
+  // IF the data is loaded. Since we increased limit to 10000, client side data should be correct now.
+  // The issue user reported "dashboard history not showing profit" might be due to 
+  // missing session_sales data in client store.
+  
+  // Let's rely on the fix in useSessionStore (limit 10000) for now.
+  // If we want to use server side for monthly, we need get_monthly_stats RPC.
+  
   return (
     <PageWrapper>
       <main className="pb-32 px-4 pt-6 dark:bg-gray-900 min-h-screen">

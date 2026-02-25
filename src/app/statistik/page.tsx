@@ -21,9 +21,39 @@ export default function StatistikPage(){
   // Year selection state
   const [selectedYear, setSelectedYear] = useState(new Date().getFullYear());
 
+  // State for daily stats
+  const [dailyStats, setDailyStats] = useState<any[]>([]);
+
   useEffect(() => {
     fetchAllSessions();
   }, [fetchAllSessions]);
+
+  // Fetch daily stats from RPC when year changes
+  useEffect(() => {
+    const fetchDailyStats = async () => {
+      try {
+        const { data: { user } } = await supabase.auth.getUser();
+        if (!user) return;
+
+        const { data, error } = await supabase.rpc('get_daily_stats', { 
+          target_user_id: user.id,
+          target_year: selectedYear
+        });
+
+        if (!error && data) {
+          setDailyStats(data);
+        } else {
+          console.warn("Failed to fetch daily stats RPC, falling back to client calc", error);
+          setDailyStats([]); // Fallback will be used if empty
+        }
+      } catch (e) {
+        console.error("Error fetching daily stats:", e);
+        setDailyStats([]);
+      }
+    };
+
+    fetchDailyStats();
+  }, [selectedYear]);
 
   // Use stats from RPC if available, otherwise fallback to client calculation
   // Client calculation (fallback):
@@ -43,62 +73,76 @@ export default function StatistikPage(){
     new Date().getFullYear() // Always include current year
   ])).sort((a, b) => b - a);
 
-  // Group transactions by date for chart
+  // Group transactions by date for chart (Fallback Logic)
   const dailyMap = new Map<string, {buy: number, sell: number, profit: number}>();
   
-  // Process BUY transactions
-  txs.filter(t => t.type === 'BUY' && new Date(t.tx_time).getFullYear() === selectedYear).forEach(tx => {
-    const dateKey = dayjs(tx.tx_time).format('DD/MM');
-    const existing = dailyMap.get(dateKey) || {buy: 0, sell: 0, profit: 0};
-    existing.buy += tx.total_idr;
-    dailyMap.set(dateKey, existing);
-  });
-  
-  sessionSales.forEach((rawSale: any) => {
-    const saleDateSource = rawSale.created_at || rawSale.transactions?.tx_time;
-    if (!saleDateSource) return;
-    const saleDate = new Date(saleDateSource);
-    if (saleDate.getFullYear() !== selectedYear) return;
-    const dateKey = dayjs(saleDateSource).format('DD/MM');
-    const existing = dailyMap.get(dateKey) || { buy: 0, sell: 0, profit: 0 };
-    existing.sell += rawSale.proceeds_idr;
-    existing.profit += rawSale.profit_idr;
-    dailyMap.set(dateKey, existing);
-  });
-  
-  // Include SELL transactions that don't have sessionSales yet (fallback)
-  const sellTxIdsWithSales = new Set(
-    sessionSales
-      .map(sale => sale.tx_id)
-      .filter((id): id is string => Boolean(id))
-  );
-  
-  txs
-    .filter(tx => 
-      tx.type === 'SELL' && 
-      new Date(tx.tx_time).getFullYear() === selectedYear &&
-      tx.id && 
-      !sellTxIdsWithSales.has(tx.id)
-    )
-    .forEach(tx => {
+  // Only process fallback if dailyStats is empty (RPC failed or empty)
+  if (dailyStats.length === 0) {
+    // Process BUY transactions
+    txs.filter(t => t.type === 'BUY' && new Date(t.tx_time).getFullYear() === selectedYear).forEach(tx => {
       const dateKey = dayjs(tx.tx_time).format('DD/MM');
-      const existing = dailyMap.get(dateKey) || { buy: 0, sell: 0, profit: 0 };
-      existing.sell += tx.total_idr;
+      const existing = dailyMap.get(dateKey) || {buy: 0, sell: 0, profit: 0};
+      existing.buy += tx.total_idr;
       dailyMap.set(dateKey, existing);
     });
-  
-  const chartData = Array.from(dailyMap.entries())
-    .map(([date, data]) => ({
-      date,
-      buy: Math.round(data.buy),
-      sell: Math.round(data.sell),
-      profit: Math.round(data.profit)
-    }))
-    .sort((a, b) => {
-      const [dayA, monthA] = a.date.split('/').map(Number);
-      const [dayB, monthB] = b.date.split('/').map(Number);
-      return monthA - monthB || dayA - dayB;
+    
+    sessionSales.forEach((rawSale: any) => {
+      const saleDateSource = rawSale.created_at || rawSale.transactions?.tx_time;
+      if (!saleDateSource) return;
+      const saleDate = new Date(saleDateSource);
+      if (saleDate.getFullYear() !== selectedYear) return;
+      const dateKey = dayjs(saleDateSource).format('DD/MM');
+      const existing = dailyMap.get(dateKey) || { buy: 0, sell: 0, profit: 0 };
+      existing.sell += rawSale.proceeds_idr;
+      existing.profit += rawSale.profit_idr;
+      dailyMap.set(dateKey, existing);
     });
+    
+    // Include SELL transactions that don't have sessionSales yet (fallback)
+    const sellTxIdsWithSales = new Set(
+      sessionSales
+        .map(sale => sale.tx_id)
+        .filter((id): id is string => Boolean(id))
+    );
+    
+    txs
+      .filter(tx => 
+        tx.type === 'SELL' && 
+        new Date(tx.tx_time).getFullYear() === selectedYear &&
+        tx.id && 
+        !sellTxIdsWithSales.has(tx.id)
+      )
+      .forEach(tx => {
+        const dateKey = dayjs(tx.tx_time).format('DD/MM');
+        const existing = dailyMap.get(dateKey) || { buy: 0, sell: 0, profit: 0 };
+        existing.sell += tx.total_idr;
+        dailyMap.set(dateKey, existing);
+      });
+  }
+  
+  // Construct chart data: Prefer RPC data, fallback to client map
+  let chartData;
+  if (dailyStats.length > 0) {
+     chartData = dailyStats.map(d => ({
+       date: dayjs(d.tx_date).format('DD/MM'),
+       buy: Number(d.buy_amount),
+       sell: Number(d.sell_amount),
+       profit: Number(d.profit_amount)
+     }));
+  } else {
+     chartData = Array.from(dailyMap.entries())
+      .map(([date, data]) => ({
+        date,
+        buy: Math.round(data.buy),
+        sell: Math.round(data.sell),
+        profit: Math.round(data.profit)
+      }))
+      .sort((a, b) => {
+        const [dayA, monthA] = a.date.split('/').map(Number);
+        const [dayB, monthB] = b.date.split('/').map(Number);
+        return monthA - monthB || dayA - dayB;
+      });
+  }
 
   // Calculate totals for selected year (chart only)
   const chartTotalBuy = chartData.reduce((sum: number, d: any) => sum + d.buy, 0);
