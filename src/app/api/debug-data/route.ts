@@ -47,10 +47,26 @@ export async function GET(req: NextRequest) {
       
     const sessionIds = userSessions?.map(s => s.id) || [];
     
-    const { data: userSales, error: userSalesError } = await supabase
-      .from('session_sales')
-      .select('*')
-      .in('session_id', sessionIds);
+    // Use chunks if sessionIds is too large
+    const chunkSize = 1000;
+    let userSales: any[] = [];
+    let userSalesError = null;
+
+    for (let i = 0; i < sessionIds.length; i += chunkSize) {
+      const chunk = sessionIds.slice(i, i + chunkSize);
+      const { data: chunkSales, error: chunkError } = await supabase
+        .from('session_sales')
+        .select('*')
+        .in('session_id', chunk);
+        
+      if (chunkError) {
+        userSalesError = chunkError;
+        break;
+      }
+      if (chunkSales) {
+        userSales = [...userSales, ...chunkSales];
+      }
+    }
 
     const totalProfit = userSales?.reduce((sum, s) => sum + (s.profit_idr || 0), 0) || 0;
 
