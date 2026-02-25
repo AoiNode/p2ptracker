@@ -72,7 +72,8 @@ RETURNS TABLE (
     amount_usdt NUMERIC,
     total_idr NUMERIC,
     profit_idr NUMERIC,
-    status TEXT
+    status TEXT,
+    session_count BIGINT
 ) AS $$
 BEGIN
     RETURN QUERY
@@ -100,7 +101,16 @@ BEGIN
                 WHERE s.id = t.session_id
             )
             ELSE 'completed'
-        END as status
+        END as status,
+        -- Count how many sessions involved in SELL
+        CASE
+            WHEN t.type = 'SELL' THEN (
+                SELECT COUNT(DISTINCT ss.session_id)
+                FROM session_sales ss
+                WHERE ss.tx_id = t.id
+            )
+            ELSE 0
+        END as session_count
     FROM transactions t
     WHERE t.user_id = target_user_id
     ORDER BY t.tx_time DESC

@@ -59,12 +59,11 @@ export default function HomePage(){
   // But wait, initial state is 0.
   // Let's mix: if we have server stats, use them.
   
-  const dashboardMonthlyPL = stats.monthlyProfit;
-  const dashboardTodayPL = stats.todayProfit;
-  
-  // Use recent activities from RPC if available, otherwise fallback to store transactions
-  const displayTransactions = recentActivities.length > 0 ? recentActivities : transactions;
-  
+  // Calculate progress based on server-side stats if available
+  const currentProgress = s.targetMonthly > 0 
+    ? (dashboardMonthlyPL / s.targetMonthly) * 100 
+    : 0;
+
   return (
     <PageWrapper>
       <main className="pb-32 px-4 pt-6 dark:bg-gray-900 min-h-screen">
@@ -79,7 +78,7 @@ export default function HomePage(){
             roi={s.roi}
             saldoAkhir={s.saldoAkhir}
             targetBulanan={s.targetMonthly}
-            progress={s.progress}
+            progress={currentProgress}
           />
         </div>
         

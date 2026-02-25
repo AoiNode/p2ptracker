@@ -78,8 +78,13 @@ export default function RecentTransactions({ transactions }: RecentTransactionsP
                   {tx.amount_usdt.toFixed(2)} USDT
                 </div>
                 {tx.type === 'SELL' && (tx as any).profit_idr !== undefined && (
-                  <div className={`text-xs mt-1 font-semibold ${(tx as any).profit_idr >= 0 ? 'text-green-500' : 'text-red-500'}`}>
-                    {(tx as any).profit_idr >= 0 ? '+' : ''}{formatIDR((tx as any).profit_idr)}
+                  <div className={`text-xs mt-1 font-semibold flex items-center justify-end gap-1 ${(tx as any).profit_idr >= 0 ? 'text-green-500' : 'text-red-500'}`}>
+                    <span>{(tx as any).profit_idr >= 0 ? '+' : ''}{formatIDR((tx as any).profit_idr)}</span>
+                    {(tx as any).session_count > 0 && (
+                      <span className="text-[10px] text-gray-400 font-normal ml-1 bg-gray-100 dark:bg-gray-800 px-1 rounded">
+                         ({(tx as any).session_count} sesi)
+                      </span>
+                    )}
                   </div>
                 )}
               </div>
