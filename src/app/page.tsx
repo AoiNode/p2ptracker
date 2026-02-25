@@ -53,11 +53,11 @@ export default function HomePage(){
   const activeSessionsCount = sessions.filter(sess => sess.status === 'active').length;
   
   // Use server-side stats for Dashboard if available
-  // Fallback to client-side calc if server-side is 0 (which might mean loading or no data)
-  // But 0 is valid profit. So we should check if fetch happened.
-  // For now, let's assume if we have stats.monthlyProfit defined (even 0), we use it.
-  // But wait, initial state is 0.
-  // Let's mix: if we have server stats, use them.
+  const dashboardMonthlyPL = stats.monthlyProfit;
+  const dashboardTodayPL = stats.todayProfit;
+
+  // Use recent activities from RPC if available, otherwise fallback to store transactions
+  const displayTransactions = recentActivities.length > 0 ? recentActivities : transactions;
   
   // Calculate progress based on server-side stats if available
   const currentProgress = s.targetMonthly > 0 
