@@ -53,6 +53,9 @@ export default function SettingsPage() {
         return;
       }
 
+      // 1. Check if RPC function is installed (Optional but helpful for diagnostics)
+      // We skip this check to be faster and just try rebuild directly
+      
       // Set timeout for fetch
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), 60000); // 60 seconds timeout
@@ -75,10 +78,18 @@ export default function SettingsPage() {
 
       if (result.success) {
         setShowFixConfirm(false);
+        
+        let message = `Berhasil! ${result.stats.processedTxs} transaksi diproses & ${result.stats.newSalesRecords} record profit diperbarui.`;
+        if (result.stats.method === 'rpc') {
+          message += " (Mode Cepat RPC ✅)";
+        } else {
+          message += " (Mode Lambat JS ⚠️ - Mohon install fungsi SQL di dashboard untuk performa lebih baik)";
+        }
+
         setFixResult({
           show: true,
           type: 'success',
-          message: `Berhasil! ${result.stats.processedTxs} transaksi diproses & ${result.stats.newSalesRecords} record profit diperbarui.`
+          message: message
         });
         
         // Refresh data after short delay
