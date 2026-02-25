@@ -17,6 +17,8 @@ type State = {
     salesCount: number;
     totalBuyVolume: number;
     activeCapital: number;
+    monthlyProfit: number; // New
+    todayProfit: number;   // New
   };
 };
 
@@ -27,6 +29,7 @@ type Actions = {
   addSmartSell: (sold_usdt: number, price_idr: number, dt?: Date, fee?: number, feeType?: 'percent' | 'value', label?: ExchangeLabel) => Promise<void>;
   fetchAllSessions: () => Promise<void>;
   fetchStats: () => Promise<void>;
+  fetchDashboardStats: () => Promise<void>; // New action
   getActiveSessions: () => Session[];
   setTargetMonthly: (target: number) => Promise<void>;
 };
@@ -43,7 +46,9 @@ export const useSessionStore = create<State & Actions>((set, get) => ({
     totalSalesVolume: 0,
     salesCount: 0,
     totalBuyVolume: 0,
-    activeCapital: 0
+    activeCapital: 0,
+    monthlyProfit: 0,
+    todayProfit: 0
   },
   
   fetchStats: async () => {
@@ -54,17 +59,38 @@ export const useSessionStore = create<State & Actions>((set, get) => ({
     const { data, error } = await supabase.rpc('get_user_stats', { target_user_id: user.id });
     
     if (!error && data) {
-      set({
+      set(state => ({
         stats: {
+          ...state.stats, // Keep existing stats
           totalProfit: data.total_profit || 0,
           totalSalesVolume: data.total_sales_volume || 0,
           salesCount: data.sales_count || 0,
           totalBuyVolume: data.total_buy_volume || 0,
           activeCapital: data.active_capital || 0
         }
-      });
+      }));
     } else {
-      console.warn("Failed to fetch server-side stats, using client-side fallback", error);
+      console.warn("Failed to fetch server-side stats", error);
+    }
+  },
+
+  fetchDashboardStats: async () => {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return;
+    
+    // Call RPC function for dashboard stats
+    const { data, error } = await supabase.rpc('get_monthly_stats', { target_user_id: user.id });
+    
+    if (!error && data) {
+      set(state => ({
+        stats: {
+          ...state.stats, // Keep existing stats
+          monthlyProfit: data.monthly_profit || 0,
+          todayProfit: data.today_profit || 0
+        }
+      }));
+    } else {
+      console.warn("Failed to fetch dashboard stats", error);
     }
   },
   

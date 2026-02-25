@@ -10,6 +10,7 @@ interface RecentTransactionsProps {
 
 export default function RecentTransactions({ transactions }: RecentTransactionsProps) {
   // Get only 5 most recent transactions
+  // If we have profit info in transaction object (from RPC), use it
   const recentTxs = transactions
     .sort((a, b) => new Date(b.tx_time).getTime() - new Date(a.tx_time).getTime())
     .slice(0, 5);
@@ -76,6 +77,11 @@ export default function RecentTransactions({ transactions }: RecentTransactionsP
                 <div className="text-xs font-medium text-gray-500 dark:text-gray-400 bg-gray-100 dark:bg-gray-700/50 px-2 py-0.5 rounded-md inline-block mt-1">
                   {tx.amount_usdt.toFixed(2)} USDT
                 </div>
+                {tx.type === 'SELL' && (tx as any).profit_idr !== undefined && (
+                  <div className={`text-xs mt-1 font-semibold ${(tx as any).profit_idr >= 0 ? 'text-green-500' : 'text-red-500'}`}>
+                    {(tx as any).profit_idr >= 0 ? '+' : ''}{formatIDR((tx as any).profit_idr)}
+                  </div>
+                )}
               </div>
             </div>
           </div>

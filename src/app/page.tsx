@@ -1,5 +1,5 @@
 "use client";
-import { useEffect, Suspense } from "react";
+import { useEffect, Suspense, useState } from "react";
 import dynamic from "next/dynamic";
 import ProfitCard from "@/components/ProfitCard";
 import PageWrapper from "@/components/PageWrapper";
@@ -15,39 +15,55 @@ const RecentTransactions = dynamic(() => import("@/components/RecentTransactions
   ssr: false
 });
 const InstallPWA = dynamic(() => import("@/components/InstallPWA"), { ssr: false });
+import { supabase } from "@/lib/supabaseClient";
 
 export default function HomePage(){
   const { user } = useAuth();
   const fetchAllSessions = useSessionStore(s => s.fetchAllSessions);
   const fetchStats = useSessionStore(s => s.fetchStats);
+  const fetchDashboardStats = useSessionStore(s => s.fetchDashboardStats); // New
   const sessions = useSessionStore(s => s.sessions);
   const transactions = useSessionStore(s => s.transactions);
   const stats = useSessionStore(s => s.stats); // Use server-side stats
   const s = computeSessionDashboard();
   
+  // State for recent activities with profit
+  const [recentActivities, setRecentActivities] = useState<any[]>([]);
+
   useEffect(() => {
     if (user) {
       fetchAllSessions();
       fetchStats(); // Ensure stats are fetched
+      fetchDashboardStats(); // Ensure dashboard stats are fetched
+      
+      // Fetch recent activities with profit
+      const fetchActivities = async () => {
+        const { data, error } = await supabase.rpc('get_recent_activities', { 
+          target_user_id: user.id,
+          limit_count: 5 
+        });
+        if (!error && data) {
+          setRecentActivities(data);
+        }
+      };
+      fetchActivities();
     }
-  }, [user, fetchAllSessions, fetchStats]);
+  }, [user, fetchAllSessions, fetchStats, fetchDashboardStats]);
 
   const activeSessionsCount = sessions.filter(sess => sess.status === 'active').length;
   
   // Use server-side stats for Dashboard if available
-  const dashboardMonthlyPL = stats.totalProfit > 0 ? stats.totalProfit : s.monthlyPL;
-  // Note: monthlyPL in store might be total profit, need to check if it's filtered by month
-  // Actually s.monthlyPL is calculated in computeSessionDashboard based on current month
-  // But stats.totalProfit is ALL TIME.
-  // We need daily stats for monthly filtering in dashboard too.
+  // Fallback to client-side calc if server-side is 0 (which might mean loading or no data)
+  // But 0 is valid profit. So we should check if fetch happened.
+  // For now, let's assume if we have stats.monthlyProfit defined (even 0), we use it.
+  // But wait, initial state is 0.
+  // Let's mix: if we have server stats, use them.
   
-  // For now, let's trust s.monthlyPL because it filters by month in client side correctly
-  // IF the data is loaded. Since we increased limit to 10000, client side data should be correct now.
-  // The issue user reported "dashboard history not showing profit" might be due to 
-  // missing session_sales data in client store.
+  const dashboardMonthlyPL = stats.monthlyProfit;
+  const dashboardTodayPL = stats.todayProfit;
   
-  // Let's rely on the fix in useSessionStore (limit 10000) for now.
-  // If we want to use server side for monthly, we need get_monthly_stats RPC.
+  // Use recent activities from RPC if available, otherwise fallback to store transactions
+  const displayTransactions = recentActivities.length > 0 ? recentActivities : transactions;
   
   return (
     <PageWrapper>
@@ -56,8 +72,8 @@ export default function HomePage(){
         <div className="mb-6">
           <ProfitCard 
             title="Profit Bulan Ini"
-            monthlyPL={s.monthlyPL}
-            todayPL={s.todayPL}
+            monthlyPL={dashboardMonthlyPL}
+            todayPL={dashboardTodayPL}
             capitalIDR={s.totalBuy}
             capitalUSDT={s.capitalUSDT}
             roi={s.roi}
@@ -111,7 +127,7 @@ export default function HomePage(){
             </Link>
           </div>
           <Suspense fallback={<LoadingSpinner size="medium" />}>
-            <RecentTransactions transactions={transactions} />
+            <RecentTransactions transactions={displayTransactions} />
           </Suspense>
         </div>
 
