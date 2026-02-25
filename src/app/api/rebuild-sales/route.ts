@@ -68,6 +68,34 @@ export async function POST(req: NextRequest) {
     const userId = user.id;
     console.log(`Starting rebuild for user ${userId}`);
 
+    // OPTIMIZATION: Try to use RPC function if available (runs entirely on DB)
+    try {
+      console.log('Attempting to use RPC rebuild_user_profit...');
+      const { data: rpcData, error: rpcError } = await supabase.rpc('rebuild_user_profit', {
+        target_user_id: userId
+      });
+
+      if (!rpcError) {
+        console.log('RPC rebuild successful:', rpcData);
+        return NextResponse.json({
+          success: true,
+          message: 'Rebuild complete (via RPC)',
+          stats: {
+            processedTxs: rpcData.processed_txs || 0,
+            newSalesRecords: rpcData.new_sales_records || 0,
+            method: 'rpc'
+          }
+        });
+      } else {
+        console.warn('RPC function not found or failed, falling back to JS implementation:', rpcError.message);
+      }
+    } catch (e) {
+      console.warn('RPC attempt failed:', e);
+    }
+
+    // FALLBACK: JS Implementation (Optimized with Batching)
+    console.log('Starting JS fallback rebuild...');
+
     // 2. Get all sessions for this user
     const { data: sessionsData, error: sessionsError } = await supabase
       .from('sessions')
