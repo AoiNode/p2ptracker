@@ -381,7 +381,11 @@ export default function SettingsPage() {
                   )}
                   {debugInfo.backend?.counts?.session_sales !== debugInfo.frontend?.salesCount && (
                     <div className="text-orange-500 mt-2 p-2 bg-orange-50 dark:bg-orange-900/20 rounded">
-                      ⚠️ Data tidak sinkron! Kemungkinan masalah permission (RLS) atau cache.
+                      ⚠️ Data tidak sinkron! Kemungkinan karena limit query.
+                      <br/>
+                      Backend ({debugInfo.backend?.counts?.session_sales}) vs Frontend ({debugInfo.frontend?.salesCount})
+                      <br/>
+                      Sistem profit sudah menggunakan perhitungan server-side (RPC), jadi total profit di Dashboard tetap AKURAT meskipun angka ini beda.
                     </div>
                   )}
                 </div>
