@@ -2,6 +2,7 @@
 import { useEffect, useState } from "react";
 import PageWrapper from "@/components/PageWrapper";
 import { useSessionStore } from "@/stores/useSessionStore";
+import { supabase } from "@/lib/supabaseClient";
 import { BarChart, Bar, LineChart, Line, AreaChart, Area, ComposedChart, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
 import dayjs from "dayjs";
 import { formatIDR } from "@/lib/utils";
