@@ -24,10 +24,22 @@ export default function StatistikPage(){
 
   // State for daily stats
   const [dailyStats, setDailyStats] = useState<any[]>([]);
+  const [dailyView, setDailyView] = useState<'month' | 'alltime'>('month');
+  const [selectedMonth, setSelectedMonth] = useState<number>(new Date().getMonth());
+  const [dailyExpanded, setDailyExpanded] = useState(true);
+  const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun', 'Jul', 'Agu', 'Sep', 'Okt', 'Nov', 'Des'];
 
   useEffect(() => {
     fetchAllSessions();
   }, [fetchAllSessions]);
+
+  useEffect(() => {
+    if (selectedYear === new Date().getFullYear()) {
+      setSelectedMonth(new Date().getMonth());
+    } else {
+      setSelectedMonth(0);
+    }
+  }, [selectedYear]);
 
   // Fetch daily stats from RPC when year changes
   useEffect(() => {
@@ -144,6 +156,16 @@ export default function StatistikPage(){
         return monthA - monthB || dayA - dayB;
       });
   }
+
+  const chartDataDisplay = dailyView === 'month'
+    ? chartData.filter((d: any) => {
+      const parts = String(d.date).split('/');
+      if (parts.length !== 2) return false;
+      const month = Number(parts[1]);
+      if (!Number.isFinite(month)) return false;
+      return month - 1 === selectedMonth;
+    })
+    : chartData;
 
   // Calculate totals for selected year (chart only)
   const chartTotalBuy = chartData.reduce((sum: number, d: any) => sum + d.buy, 0);
@@ -509,11 +531,59 @@ export default function StatistikPage(){
         {/* Chart or Empty State */}
         {chartData.length > 0 ? (
           <div className="bg-white dark:bg-gray-800 rounded-3xl p-5 shadow-soft">
-            <h2 className="text-lg font-semibold text-gray-800 dark:text-white mb-3">Daily Performance</h2>
-            <div className="h-64">
-              <ResponsiveContainer width="100%" height="100%">
-                {currentTheme.chartType === 'line' ? (
-                  <LineChart data={chartData}>
+            <div className="flex items-center justify-between gap-3 mb-3">
+              <div className="flex items-center gap-3">
+                <h2 className="text-lg font-semibold text-gray-800 dark:text-white">Daily Performance</h2>
+                <button
+                  onClick={() => setDailyExpanded(v => !v)}
+                  className="text-xs px-2 py-1 rounded-full bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors"
+                >
+                  {dailyExpanded ? 'Sembunyikan' : 'Tampilkan'}
+                </button>
+              </div>
+              <div className="flex items-center gap-2">
+                <div className="flex items-center rounded-xl overflow-hidden border border-gray-200 dark:border-gray-700">
+                  <button
+                    onClick={() => setDailyView('month')}
+                    className={`px-3 py-1.5 text-xs font-semibold transition-colors ${
+                      dailyView === 'month'
+                        ? 'bg-purple-600 text-white'
+                        : 'bg-white dark:bg-gray-800 text-gray-600 dark:text-gray-300'
+                    }`}
+                  >
+                    Per Bulan
+                  </button>
+                  <button
+                    onClick={() => setDailyView('alltime')}
+                    className={`px-3 py-1.5 text-xs font-semibold transition-colors ${
+                      dailyView === 'alltime'
+                        ? 'bg-purple-600 text-white'
+                        : 'bg-white dark:bg-gray-800 text-gray-600 dark:text-gray-300'
+                    }`}
+                  >
+                    All Time
+                  </button>
+                </div>
+                {dailyView === 'month' && (
+                  <select
+                    value={selectedMonth}
+                    onChange={(e) => setSelectedMonth(Number(e.target.value))}
+                    className="text-xs px-3 py-2 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-200"
+                  >
+                    {monthNames.map((m, idx) => (
+                      <option key={m} value={idx}>{m}</option>
+                    ))}
+                  </select>
+                )}
+              </div>
+            </div>
+
+            {dailyExpanded ? (
+              chartDataDisplay.length > 0 ? (
+                <div className="h-64">
+                  <ResponsiveContainer width="100%" height="100%">
+                    {currentTheme.chartType === 'line' ? (
+                      <LineChart data={chartDataDisplay}>
                     <CartesianGrid strokeDasharray="3 3" stroke={isDark ? '#374151' : '#E5E7EB'} />
                     <XAxis dataKey="date" stroke={isDark ? '#9CA3AF' : '#6B7280'} />
                     <YAxis tickFormatter={(value: any) => `${value/1000}k`} stroke={isDark ? '#9CA3AF' : '#6B7280'} />
@@ -522,9 +592,9 @@ export default function StatistikPage(){
                     <Line type="monotone" dataKey="buy" stroke={isDark ? currentTheme.chartColors.buyDark : currentTheme.chartColors.buy} strokeWidth={2} dot={{ r: 4 }} name="Beli" />
                     <Line type="monotone" dataKey="sell" stroke={isDark ? currentTheme.chartColors.sellDark : currentTheme.chartColors.sell} strokeWidth={2} dot={{ r: 4 }} name="Jual" />
                     <Line type="monotone" dataKey="profit" stroke={isDark ? currentTheme.chartColors.profitDark : currentTheme.chartColors.profit} strokeWidth={2} dot={{ r: 4 }} name="Profit" />
-                  </LineChart>
-                ) : currentTheme.chartType === 'area' ? (
-                  <AreaChart data={chartData}>
+                      </LineChart>
+                    ) : currentTheme.chartType === 'area' ? (
+                      <AreaChart data={chartDataDisplay}>
                     <defs>
                       <linearGradient id="buyGradient" x1="0" y1="0" x2="0" y2="1">
                         <stop offset="5%" stopColor={isDark ? currentTheme.chartColors.buyDark : currentTheme.chartColors.buy} stopOpacity={0.8}/>
@@ -547,9 +617,9 @@ export default function StatistikPage(){
                     <Area type="monotone" dataKey="buy" stroke={isDark ? currentTheme.chartColors.buyDark : currentTheme.chartColors.buy} fill="url(#buyGradient)" name="Beli" />
                     <Area type="monotone" dataKey="sell" stroke={isDark ? currentTheme.chartColors.sellDark : currentTheme.chartColors.sell} fill="url(#sellGradient)" name="Jual" />
                     <Area type="monotone" dataKey="profit" stroke={isDark ? currentTheme.chartColors.profitDark : currentTheme.chartColors.profit} fill="url(#profitGradient)" name="Profit" />
-                  </AreaChart>
-                ) : currentTheme.chartType === 'composed' ? (
-                  <ComposedChart data={chartData}>
+                      </AreaChart>
+                    ) : currentTheme.chartType === 'composed' ? (
+                      <ComposedChart data={chartDataDisplay}>
                     <CartesianGrid strokeDasharray="3 3" stroke={isDark ? '#374151' : '#E5E7EB'} />
                     <XAxis dataKey="date" stroke={isDark ? '#9CA3AF' : '#6B7280'} />
                     <YAxis tickFormatter={(value: any) => `${value/1000}k`} stroke={isDark ? '#9CA3AF' : '#6B7280'} />
@@ -558,9 +628,9 @@ export default function StatistikPage(){
                     <Bar dataKey="buy" fill={isDark ? currentTheme.chartColors.buyDark : currentTheme.chartColors.buy} name="Beli" />
                     <Bar dataKey="sell" fill={isDark ? currentTheme.chartColors.sellDark : currentTheme.chartColors.sell} name="Jual" />
                     <Line type="monotone" dataKey="profit" stroke={isDark ? currentTheme.chartColors.profitDark : currentTheme.chartColors.profit} strokeWidth={3} dot={{ r: 5 }} name="Profit" />
-                  </ComposedChart>
-                ) : (
-                  <BarChart data={chartData}>
+                      </ComposedChart>
+                    ) : (
+                      <BarChart data={chartDataDisplay}>
                     <CartesianGrid strokeDasharray="3 3" stroke={isDark ? '#374151' : '#E5E7EB'} />
                     <XAxis dataKey="date" stroke={isDark ? '#9CA3AF' : '#6B7280'} />
                     <YAxis tickFormatter={(value: any) => `${value/1000}k`} stroke={isDark ? '#9CA3AF' : '#6B7280'} />
@@ -569,10 +639,22 @@ export default function StatistikPage(){
                     <Bar dataKey="buy" fill={isDark ? currentTheme.chartColors.buyDark : currentTheme.chartColors.buy} name="Beli" />
                     <Bar dataKey="sell" fill={isDark ? currentTheme.chartColors.sellDark : currentTheme.chartColors.sell} name="Jual" />
                     <Bar dataKey="profit" fill={isDark ? currentTheme.chartColors.profitDark : currentTheme.chartColors.profit} name="Profit" />
-                  </BarChart>
-                )}
-              </ResponsiveContainer>
-            </div>
+                      </BarChart>
+                    )}
+                  </ResponsiveContainer>
+                </div>
+              ) : (
+                <div className="bg-gray-50 dark:bg-gray-900/50 rounded-2xl p-6 text-center text-sm text-gray-600 dark:text-gray-300">
+                  Tidak ada data untuk periode ini.
+                </div>
+              )
+            ) : (
+              <div className="text-xs text-gray-500 dark:text-gray-400">
+                {dailyView === 'month'
+                  ? `Menampilkan harian bulan ${monthNames[selectedMonth]} ${selectedYear}`
+                  : `Menampilkan harian sepanjang ${selectedYear}`}
+              </div>
+            )}
           </div>
         ) : (
           <div className="bg-white dark:bg-gray-800 rounded-3xl p-8 shadow-soft">

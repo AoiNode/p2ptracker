@@ -223,8 +223,9 @@ export default function ImportTransactionModal({ isOpen, onClose, onSuccess }: I
         error: isDuplicate ? 'Transaction already exists' : undefined,
         isCanceled
       };
-    }).filter(t => t.price > 0 && t.fiatAmount > 0) // Filter invalid rows
-      .sort((a, b) => a.date.getTime() - b.date.getTime()); // Sort by date ascending (oldest first)
+    }).filter(t => t.price > 0 && t.fiatAmount > 0); // Filter invalid rows
+
+    processed.reverse();
 
     setParsedData(processed);
     setStep('preview');
@@ -233,9 +234,6 @@ export default function ImportTransactionModal({ isOpen, onClose, onSuccess }: I
   const handleImport = async () => {
     setStep('importing');
     const selected = parsedData.filter(t => t.selected);
-    
-    // Sort by date ascending to process in order
-    selected.sort((a, b) => a.date.getTime() - b.date.getTime());
 
     for (const tx of selected) {
       try {
@@ -422,7 +420,7 @@ export default function ImportTransactionModal({ isOpen, onClose, onSuccess }: I
                 </div>
               </div>
 
-              <style jsx global>{`
+              <style>{`
                 /* Custom Scrollbar for Import Table */
                 .custom-scrollbar::-webkit-scrollbar {
                   width: 12px;
