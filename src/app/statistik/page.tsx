@@ -531,21 +531,22 @@ export default function StatistikPage(){
         {/* Chart or Empty State */}
         {chartData.length > 0 ? (
           <div className="bg-white dark:bg-gray-800 rounded-3xl p-5 shadow-soft">
-            <div className="flex items-center justify-between gap-3 mb-3">
-              <div className="flex items-center gap-3">
+            <div className="flex flex-col gap-3 mb-3 sm:flex-row sm:items-center sm:justify-between">
+              <div className="flex items-center justify-between gap-3">
                 <h2 className="text-lg font-semibold text-gray-800 dark:text-white">Daily Performance</h2>
                 <button
                   onClick={() => setDailyExpanded(v => !v)}
-                  className="text-xs px-2 py-1 rounded-full bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors"
+                  className="shrink-0 text-xs px-2 py-1 rounded-full bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors"
                 >
                   {dailyExpanded ? 'Sembunyikan' : 'Tampilkan'}
                 </button>
               </div>
-              <div className="flex items-center gap-2">
-                <div className="flex items-center rounded-xl overflow-hidden border border-gray-200 dark:border-gray-700">
+
+              <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-end">
+                <div className="w-full sm:w-auto flex items-center rounded-xl overflow-hidden border border-gray-200 dark:border-gray-700">
                   <button
                     onClick={() => setDailyView('month')}
-                    className={`px-3 py-1.5 text-xs font-semibold transition-colors ${
+                    className={`flex-1 sm:flex-none px-3 py-2 text-xs font-semibold transition-colors ${
                       dailyView === 'month'
                         ? 'bg-purple-600 text-white'
                         : 'bg-white dark:bg-gray-800 text-gray-600 dark:text-gray-300'
@@ -555,7 +556,7 @@ export default function StatistikPage(){
                   </button>
                   <button
                     onClick={() => setDailyView('alltime')}
-                    className={`px-3 py-1.5 text-xs font-semibold transition-colors ${
+                    className={`flex-1 sm:flex-none px-3 py-2 text-xs font-semibold transition-colors ${
                       dailyView === 'alltime'
                         ? 'bg-purple-600 text-white'
                         : 'bg-white dark:bg-gray-800 text-gray-600 dark:text-gray-300'
@@ -564,11 +565,12 @@ export default function StatistikPage(){
                     All Time
                   </button>
                 </div>
+
                 {dailyView === 'month' && (
                   <select
                     value={selectedMonth}
                     onChange={(e) => setSelectedMonth(Number(e.target.value))}
-                    className="text-xs px-3 py-2 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-200"
+                    className="w-full sm:w-auto text-xs px-3 py-2 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-200"
                   >
                     {monthNames.map((m, idx) => (
                       <option key={m} value={idx}>{m}</option>
