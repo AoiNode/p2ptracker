@@ -8,32 +8,34 @@ DECLARE
     v_deleted_sessions INTEGER := 0;
 BEGIN
     -- 1. Delete session_sales for CLOSED sessions
-    -- Using a batch to avoid locking
-    DELETE FROM session_sales ss
-    WHERE ss.id IN (
-        SELECT ss2.id FROM session_sales ss2
-        JOIN sessions s ON s.id = ss2.session_id
+    -- Using a batch to avoid locking, with direct join for speed
+    DELETE FROM session_sales
+    WHERE id IN (
+        SELECT ss.id 
+        FROM session_sales ss
+        JOIN sessions s ON s.id = ss.session_id
         WHERE s.user_id = target_user_id 
         AND s.status = 'closed'
-        LIMIT 10000 -- Batch size
+        LIMIT 10000
     )
     RETURNING count(*) INTO v_deleted_sales;
 
     -- 2. Delete Transactions
     -- Delete all SELL transactions (already archived in Excel)
     -- AND BUY transactions that are closed or orphaned
-    DELETE FROM transactions t
-    WHERE t.id IN (
-        SELECT t2.id FROM transactions t2
-        WHERE t2.user_id = target_user_id
+    DELETE FROM transactions
+    WHERE id IN (
+        SELECT t.id 
+        FROM transactions t
+        WHERE t.user_id = target_user_id
         AND (
-            t2.type = 'SELL'
-            OR (t2.type = 'BUY' AND (
-                t2.session_id IS NULL 
-                OR EXISTS (SELECT 1 FROM sessions s WHERE s.id = t2.session_id AND s.status = 'closed')
+            t.type = 'SELL'
+            OR (t.type = 'BUY' AND (
+                t.session_id IS NULL 
+                OR EXISTS (SELECT 1 FROM sessions s WHERE s.id = t.session_id AND s.status = 'closed')
             ))
         )
-        LIMIT 10000 -- Batch size
+        LIMIT 10000
     )
     RETURNING count(*) INTO v_deleted_txs;
 
@@ -43,9 +45,18 @@ BEGIN
         SELECT id FROM sessions 
         WHERE user_id = target_user_id 
         AND status = 'closed'
-        LIMIT 10000 -- Batch size
+        LIMIT 10000
     )
     RETURNING count(*) INTO v_deleted_sessions;
+
+    -- 4. Final safety check: Delete any SELL transactions that might have been missed
+    -- (e.g. if they weren't linked to a session for some reason)
+    WITH deleted_extra AS (
+        DELETE FROM transactions 
+        WHERE user_id = target_user_id AND type = 'SELL'
+        RETURNING 1
+    )
+    SELECT v_deleted_txs + count(*) INTO v_deleted_txs FROM deleted_extra;
 
     RETURN jsonb_build_object(
         'success', true,
