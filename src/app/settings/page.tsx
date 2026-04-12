@@ -55,6 +55,7 @@ export default function SettingsPage() {
   };
 
   const handleMonthlyClosing = async () => {
+    setShowClosingConfirm(false);
     setShowClosingProgress(true);
     setIsClosing(true);
     setClosingError(null);
@@ -233,7 +234,6 @@ export default function SettingsPage() {
       });
     } finally {
       setIsClosing(false);
-      setShowClosingConfirm(false);
     }
   };
 
@@ -539,7 +539,7 @@ export default function SettingsPage() {
         )}
 
         {showClosingProgress && (
-          <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center px-4">
+          <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-[60] flex items-center justify-center px-4">
             <div className="bg-white dark:bg-gray-800 rounded-2xl p-6 w-full max-w-md animate-slide-up border border-gray-100 dark:border-gray-700">
               <div className="flex items-start justify-between mb-4">
                 <div>
