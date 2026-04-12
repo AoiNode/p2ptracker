@@ -17,8 +17,8 @@ BEGIN
         SELECT id FROM sessions 
         WHERE user_id = target_user_id 
         AND status = 'closed'
-    )
-    RETURNING count(*) INTO v_deleted_sales;
+    );
+    GET DIAGNOSTICS v_deleted_sales = ROW_COUNT;
 
     -- STEP 2: Delete Transactions
     -- We delete ALL SELL transactions (they are already in Excel)
@@ -37,15 +37,15 @@ BEGIN
     AND (
         session_id IS NULL 
         OR session_id NOT IN (SELECT id FROM sessions WHERE user_id = target_user_id AND remaining_usdt > 0.00000001)
-    )
-    RETURNING count(*) INTO v_deleted_txs;
+    );
+    GET DIAGNOSTICS v_deleted_txs = ROW_COUNT;
 
     -- STEP 3: Delete CLOSED sessions
     DELETE FROM sessions
     WHERE user_id = target_user_id 
     AND status = 'closed'
-    AND remaining_usdt <= 0.00000001 -- Safety check
-    RETURNING count(*) INTO v_deleted_sessions;
+    AND remaining_usdt <= 0.00000001; -- Safety check
+    GET DIAGNOSTICS v_deleted_sessions = ROW_COUNT;
 
     RETURN jsonb_build_object(
         'success', true,
