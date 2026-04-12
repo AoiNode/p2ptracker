@@ -62,7 +62,7 @@ export default function TransaksiPage() {
   useEffect(() => {
     fetchAllSessions();
     fetchEnrichedTransactions();
-  }, []);
+  }, [fetchAllSessions]);
 
   const fetchEnrichedTransactions = async () => {
     setIsLoading(true);

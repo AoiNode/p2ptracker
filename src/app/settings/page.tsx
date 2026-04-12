@@ -355,7 +355,7 @@ export default function SettingsPage() {
               ) : (
                 <div className="mb-6 p-4 bg-blue-50 dark:bg-blue-900/20 rounded-2xl border border-blue-100 dark:border-blue-900/30">
                   <p className="text-xs text-blue-700 dark:text-blue-300 leading-relaxed text-center italic">
-                    "Gunakan fitur ini setiap akhir bulan untuk menjaga performa aplikasi tetap cepat. Data modal tetap aman."
+                    &quot;Gunakan fitur ini setiap akhir bulan untuk menjaga performa aplikasi tetap cepat. Data modal tetap aman.&quot;
                   </p>
                 </div>
               )}
