@@ -680,22 +680,31 @@ function renderTransaction(
   selectedTxIds: Set<string>,
   toggleSelect: (id: string) => void
 ) {
-  const hasDateMismatch = t.created_at && !dayjs(t.tx_time).isSame(dayjs(t.created_at), 'day');
+  let salesDetails: any[] = [];
   
+  // Date check for potential session mismatch
+  const hasDateMismatch = t.session_id && sessions.find(s => s.id === t.session_id) && 
+                         dayjs(t.tx_time).format('YYYY-MM-DD') !== dayjs(sessions.find(s => s.id === t.session_id)?.created_at).format('YYYY-MM-DD');
+
   let sessionInfo = null;
-  let salesDetails: Array<{
-    sessionDate: string;
-    sessionDateRaw: Date;
-    usdt: number;
-    profit: number;
-    cost: number;
-    avgCost: number;
-  }> = [];
-  
-  if (t.type === 'BUY' && t.session_id) {
-    const session = sessions.find(s => s.id === t.session_id);
+
+  if (t.type === 'BUY') {
+    // 1. Try to find session by t.session_id
+    let session = sessions.find(s => s.id === t.session_id);
+    
+    // 2. If no session_id, try to find by price and time (fallback for legacy or broken links)
+    if (!session) {
+      session = sessions.find(s => 
+        Math.abs(s.price_idr - t.price_idr) < 1 && 
+        Math.abs(new Date(s.created_at).getTime() - new Date(t.tx_time).getTime()) < 5000
+      );
+    }
+
     if (session) {
       sessionInfo = `Sisa: ${session.remaining_usdt.toFixed(2)} USDT`;
+    } else {
+      // 3. Last fallback: if it's a BUY and we can't find the session, it's likely a data sync issue
+      sessionInfo = `Sisa: Data tidak sinkron`;
     }
   } else if (t.type === 'SELL' && t.id) {
     let totalProfit = 0;
