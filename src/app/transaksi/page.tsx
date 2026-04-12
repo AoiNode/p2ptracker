@@ -695,6 +695,7 @@ function renderTransaction(
     // 2. If no session_id, try to find by price and time (fallback for legacy or broken links)
     if (!session) {
       session = sessions.find(s => 
+        s.price_idr !== undefined && 
         Math.abs(s.price_idr - t.price_idr) < 1 && 
         Math.abs(new Date(s.created_at).getTime() - new Date(t.tx_time).getTime()) < 5000
       );
