@@ -9,6 +9,7 @@ import { formatIDR } from "@/lib/utils";
 import { getButtonStyle } from "@/lib/buttonStyles";
 import ConfirmModal from "@/components/ConfirmModal";
 import PopupNotification from "@/components/PopupNotification";
+import dayjs from "dayjs";
 
 export default function SettingsPage() {
   const router = useRouter();
@@ -20,7 +21,18 @@ export default function SettingsPage() {
   const [loggingOut, setLoggingOut] = useState(false);
   const [isFixing, setIsFixing] = useState(false);
   const [fixResult, setFixResult] = useState<{show: boolean, type: 'success' | 'error', message: string}>({
-    show: false, type: 'success', message: ''
+    show: false,
+    type: 'success',
+    message: ''
+  });
+
+  // Closing State
+  const [showClosingConfirm, setShowClosingConfirm] = useState(false);
+  const [isClosing, setIsClosing] = useState(false);
+  const [closingResult, setClosingResult] = useState<{show: boolean, type: 'success' | 'error', message: string}>({
+    show: false,
+    type: 'success',
+    message: ''
   });
   
   const targetMonthly = useSessionStore(s => s.targetMonthly);
@@ -32,6 +44,90 @@ export default function SettingsPage() {
     if (newTarget > 0) {
       await setTargetMonthly(newTarget);
       setShowTargetModal(false);
+    }
+  };
+
+  const handleMonthlyClosing = async () => {
+    setIsClosing(true);
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) throw new Error("Silakan login kembali");
+
+      // 1. Get current month data from store
+      const { transactions, sessions, sessionSales } = useSessionStore.getState();
+      
+      // 2. Prepare Excel using 'xlsx'
+      const XLSX = await import('xlsx');
+      const wb = XLSX.utils.book_new();
+      
+      // Prepare Sheets
+      const txSheet = XLSX.utils.json_to_sheet(transactions.map(t => ({
+        Tanggal: dayjs(t.tx_time).format('YYYY-MM-DD HH:mm'),
+        Tipe: t.type,
+        Exchange: t.label,
+        Harga: t.price_idr,
+        Jumlah_USDT: t.amount_usdt,
+        Total_IDR: t.total_idr,
+        Fee: t.fee_idr
+      })));
+      XLSX.utils.book_append_sheet(wb, txSheet, "Transaksi");
+
+      const profitSheet = XLSX.utils.json_to_sheet(sessionSales.map(s => ({
+        Tanggal_Jual: dayjs(s.created_at).format('YYYY-MM-DD HH:mm'),
+        USDT_Terjual: s.sold_usdt,
+        Modal_IDR: s.cost_idr,
+        Pendapatan_IDR: s.proceeds_idr,
+        Profit_IDR: s.profit_idr
+      })));
+      XLSX.utils.book_append_sheet(wb, profitSheet, "Profit_FIFO");
+
+      // Convert to Base64
+      const wbout = XLSX.write(wb, { bookType: 'xlsx', type: 'base64' });
+
+      // 3. Get Chat ID
+      const linkResponse = await fetch('/api/telegram/link', {
+        headers: { 'Authorization': `Bearer ${session.access_token}` }
+      });
+      const linkData = await linkResponse.json();
+      if (!linkData.linked || !linkData.account?.telegram_user_id) {
+        throw new Error("Bot Telegram belum terhubung. Hubungkan bot dulu di menu Akun & Target.");
+      }
+
+      // 4. Send to API
+      const res = await fetch('/api/monthly-closing', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${session.access_token}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          excelData: wbout,
+          fileName: `Rekap_P2P_${dayjs().format('MMM_YYYY')}.xlsx`,
+          chatId: linkData.account.telegram_user_id
+        })
+      });
+
+      const result = await res.json();
+      if (!res.ok) throw new Error(result.error);
+
+      setClosingResult({
+        show: true,
+        type: 'success',
+        message: `Tutup Buku Berhasil! Rekap dikirim ke Telegram. ${result.archiveStats.deleted_transactions} riwayat lama dibersihkan. Sesi aktif tetap dipertahankan.`
+      });
+
+      setTimeout(() => window.location.reload(), 5000);
+
+    } catch (e: any) {
+      console.error(e);
+      setClosingResult({
+        show: true,
+        type: 'error',
+        message: e.message || "Gagal melakukan tutup buku"
+      });
+    } finally {
+      setIsClosing(false);
+      setShowClosingConfirm(false);
     }
   };
 
@@ -194,23 +290,47 @@ export default function SettingsPage() {
             <h2 className="text-sm font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-3 px-1">
               Bantuan & Perbaikan Data
             </h2>
-            <div className="bg-orange-50 dark:bg-orange-900/10 border border-orange-100 dark:border-orange-900/30 rounded-3xl p-5">
-              <div className="flex items-start gap-4 mb-4">
-                <div className="p-3 bg-orange-100 dark:bg-orange-900/30 rounded-2xl text-2xl">
-                  🛠️
-                </div>
-                <div>
-                  <h3 className="font-bold text-orange-800 dark:text-orange-400">Sesi Aktif Tidak Muncul?</h3>
-                  <p className="text-sm text-orange-700 dark:text-orange-500 mt-1">
-                    Jika Anda merasa ada sesi yang harusnya aktif tapi tidak muncul, atau data profit tidak sinkron, gunakan fitur perbaikan di bawah.
-                  </p>
-                </div>
-              </div>
-              <button
-                onClick={() => setShowFixConfirm(true)}
-                className="w-full py-3 bg-orange-500 hover:bg-orange-600 text-white font-bold rounded-2xl transition-all shadow-lg shadow-orange-500/25 flex items-center justify-center gap-2"
+            <div className="bg-white dark:bg-gray-800 rounded-3xl p-2 shadow-sm border border-gray-100 dark:border-gray-700">
+              {/* Monthly Closing */}
+              <button 
+                onClick={() => setShowClosingConfirm(true)}
+                disabled={isClosing}
+                className="w-full text-left p-4 hover:bg-purple-50 dark:hover:bg-purple-900/20 rounded-2xl transition-colors group disabled:opacity-50"
               >
-                <span>Perbaiki Sinkronisasi Data Sesi</span>
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-4">
+                    <div className="w-10 h-10 rounded-xl bg-purple-50 dark:bg-purple-900/20 flex items-center justify-center text-xl text-purple-600">
+                      📊
+                    </div>
+                    <div>
+                      <div className="font-medium text-gray-900 dark:text-white">Tutup Buku Bulanan</div>
+                      <div className="text-sm text-gray-500 dark:text-gray-400">Kirim rekap Excel ke Telegram & reset riwayat</div>
+                    </div>
+                  </div>
+                  <div className="text-gray-400 group-hover:text-purple-500 transition-colors">→</div>
+                </div>
+              </button>
+
+              <div className="h-px bg-gray-100 dark:bg-gray-700 mx-4 my-1" />
+
+              {/* Fix Profit */}
+              <button 
+                onClick={() => setShowFixConfirm(true)}
+                disabled={isFixing}
+                className="w-full text-left p-4 hover:bg-yellow-50 dark:hover:bg-yellow-900/20 rounded-2xl transition-colors group disabled:opacity-50"
+              >
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-4">
+                    <div className="w-10 h-10 rounded-xl bg-yellow-50 dark:bg-yellow-900/20 flex items-center justify-center text-xl">
+                      🛠️
+                    </div>
+                    <div>
+                      <div className="font-medium text-gray-900 dark:text-white">Sinkronisasi Sesi</div>
+                      <div className="text-sm text-gray-500 dark:text-gray-400">Perbaiki sisa saldo USDT yang tidak akurat</div>
+                    </div>
+                  </div>
+                  <div className="text-gray-400 group-hover:text-yellow-600 transition-colors">→</div>
+                </div>
               </button>
             </div>
           </section>
@@ -555,6 +675,26 @@ export default function SettingsPage() {
           title={fixResult.type === 'success' ? 'Perbaikan Berhasil' : 'Gagal Memperbaiki'}
           message={fixResult.message}
           onClose={() => setFixResult(prev => ({ ...prev, show: false }))}
+        />
+
+        <PopupNotification
+          show={closingResult.show}
+          type={closingResult.type}
+          title={closingResult.type === 'success' ? 'Berhasil' : 'Gagal'}
+          message={closingResult.message}
+          onClose={() => setClosingResult(prev => ({ ...prev, show: false }))}
+        />
+
+        {/* Confirm Monthly Closing */}
+        <ConfirmModal
+          isOpen={showClosingConfirm}
+          onClose={() => !isClosing && setShowClosingConfirm(false)}
+          onConfirm={handleMonthlyClosing}
+          title="Tutup Buku Bulanan"
+          message="Sistem akan mengirimkan rekap transaksi bulan ini ke Bot Telegram Anda (Excel), lalu menghapus riwayat transaksi lama yang sudah tertutup. Sesi yang masih aktif (ada sisa USDT) tetap dipertahankan. Lanjutkan?"
+          confirmText="Ya, Tutup Buku"
+          isLoading={isClosing}
+          type="warning"
         />
 
         {/* Target Modal */}
