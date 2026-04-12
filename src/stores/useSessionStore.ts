@@ -421,42 +421,44 @@ export const useSessionStore = create<State & Actions>((set, get) => ({
       set({ targetMonthly: parseInt(settingsData.setting_value) });
     }
     
-    // Build query for transactions - only for current user
+    // Build query for sessions - Strategy: 
+    // 1. Get ALL sessions where remaining_usdt > 0 (Active sessions from ANY time)
+    // 2. Get closed sessions only from the last 90 days (Recent history)
+    const ninetyDaysAgo = new Date();
+    ninetyDaysAgo.setDate(ninetyDaysAgo.getDate() - 90);
+    const ninetyDaysAgoStr = ninetyDaysAgo.toISOString();
+
+    const { data: sessions } = await supabase.from("sessions")
+      .select("*")
+      .eq('user_id', user.id)
+      .or(`remaining_usdt.gt.0.00000001,created_at.gt.${ninetyDaysAgoStr}`)
+      .order("created_at", { ascending: true })
+      .limit(10000); 
+    
+    // Build query for transactions - limited to last 1000 for performance, 
+    // but ensured to cover the active session range
     const { data: txs } = await supabase.from("transactions")
       .select("*")
       .eq('user_id', user.id)
       .order("tx_time", { ascending: false })
-      .limit(10000); // Increased limit from default 1000
+      .limit(5000); 
     
-    // Build query for sessions - only for current user
-    const { data: sessions } = await supabase.from("sessions")
-      .select("*")
-      .eq('user_id', user.id)
-      .order("created_at", { ascending: true }) // Changed to ascending for FIFO display
-      .limit(10000); // Increased limit
-    
-    // Fetch session_sales for user's sessions
+    // Fetch session_sales for the sessions we just fetched
     const sessionIds = sessions?.map((s: Session) => s.id).filter(Boolean) || [];
     let sales: SessionSale[] = [];
     
     if (sessionIds.length > 0) {
-      // Supabase has limit on 'in' clause and response size
-      // If sessions are too many, we might need to batch this or just increase limit
+      // Fetch sales related to these sessions
       const { data: salesData } = await supabase.from("session_sales")
         .select(`
           *,
           transactions!session_sales_tx_id_fkey (
-            id,
-            price_idr,
-            amount_usdt,
-            total_idr,
-            tx_time,
-            type
+            id, price_idr, amount_usdt, total_idr, tx_time, type
           )
         `)
         .in('session_id', sessionIds)
         .order("created_at", { ascending: false })
-        .limit(10000); // Increased limit
+        .limit(10000);
       
       sales = salesData || [];
     }
