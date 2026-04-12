@@ -172,13 +172,26 @@ export default function StatistikPage(){
   const chartTotalSell = chartData.reduce((sum: number, d: any) => sum + d.sell, 0);
   const chartTotalProfit = chartData.reduce((sum: number, d: any) => sum + d.profit, 0);
 
-  // Determine what to display in cards
-  // If selected year is current year, show ALL TIME stats from RPC/Store
-  // If selected year is specific (past), show chart totals
   const isCurrentYear = selectedYear === new Date().getFullYear();
-  const cardProfit = isCurrentYear ? displayTotalProfit : chartTotalProfit;
-  const cardBuy = isCurrentYear ? displayTotalBuy : chartTotalBuy;
-  const cardSell = isCurrentYear ? displayTotalSell : chartTotalSell;
+
+  // Determine what to display in cards
+  // Now supports month filter for card summaries too
+  const filteredDisplayData = dailyView === 'month' 
+    ? chartData.filter((d: any) => {
+        const parts = String(d.date).split('/');
+        return parts.length === 2 && Number(parts[1]) - 1 === selectedMonth;
+      })
+    : chartData;
+
+  const displayTotalProfitFiltered = filteredDisplayData.reduce((sum: number, d: any) => sum + d.profit, 0);
+  const displayTotalBuyFiltered = filteredDisplayData.reduce((sum: number, d: any) => sum + d.buy, 0);
+  const displayTotalSellFiltered = filteredDisplayData.reduce((sum: number, d: any) => sum + d.sell, 0);
+
+  // If viewing all time year, but filtered by month, use filtered totals.
+  // Otherwise use the existing card logic.
+  const cardProfit = (dailyView === 'month') ? displayTotalProfitFiltered : (isCurrentYear ? displayTotalProfit : chartTotalProfit);
+  const cardBuy = (dailyView === 'month') ? displayTotalBuyFiltered : (isCurrentYear ? displayTotalBuy : chartTotalBuy);
+  const cardSell = (dailyView === 'month') ? displayTotalSellFiltered : (isCurrentYear ? displayTotalSell : chartTotalSell);
 
   const handleDownloadCSV = (period: 'daily' | 'weekly' | 'monthly' | 'alltime') => {
     setShowModal(false);
@@ -424,17 +437,43 @@ export default function StatistikPage(){
         
         {/* Summary Cards */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
-          <div className="p-5 bg-gradient-to-br from-green-500 to-green-600 rounded-3xl text-white shadow-lg shadow-green-500/20">
-            <div className="text-white/80 text-sm mb-1">Total Profit (Realized)</div>
-            <div className="text-3xl font-bold">{formatIDR(cardProfit)}</div>
+          <div className="p-6 bg-gradient-to-br from-emerald-500 to-teal-600 rounded-[2rem] text-white shadow-lg shadow-emerald-500/20 transition-transform hover:scale-[1.02] active:scale-[0.98]">
+            <div className="flex justify-between items-start mb-2">
+              <div className="text-white/80 text-sm font-medium">Total Profit (Realized)</div>
+              <div className="bg-white/20 p-1.5 rounded-xl backdrop-blur-sm">
+                <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6"></path></svg>
+              </div>
+            </div>
+            <div className="text-3xl font-bold tracking-tight">{formatIDR(cardProfit)}</div>
+            <div className="mt-2 text-[10px] text-white/60 uppercase tracking-widest font-semibold">
+              {dailyView === 'month' ? `Periode ${monthNames[selectedMonth]}` : 'Seluruh Waktu'}
+            </div>
           </div>
-          <div className="p-5 bg-white dark:bg-gray-800 rounded-3xl border border-gray-100 dark:border-gray-700 shadow-sm">
-            <div className="text-gray-500 dark:text-gray-400 text-sm mb-1">Volume Beli</div>
-            <div className="text-2xl font-bold text-gray-900 dark:text-white">{formatIDR(cardBuy)}</div>
+          
+          <div className="p-6 bg-white dark:bg-gray-800 rounded-[2rem] border border-gray-100 dark:border-gray-700 shadow-sm transition-transform hover:scale-[1.02] active:scale-[0.98]">
+            <div className="flex justify-between items-start mb-2">
+              <div className="text-gray-500 dark:text-gray-400 text-sm font-medium">Volume Beli</div>
+              <div className="bg-rose-50 dark:bg-rose-900/20 p-1.5 rounded-xl">
+                <svg className="w-5 h-5 text-rose-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M16 11V7a4 4 0 00-8 0v4M5 9h14l1 12H4L5 9z"></path></svg>
+              </div>
+            </div>
+            <div className="text-2xl font-bold text-gray-900 dark:text-white tracking-tight">{formatIDR(cardBuy)}</div>
+            <div className="mt-2 text-[10px] text-gray-400 uppercase tracking-widest font-semibold">
+              Total Pembelian
+            </div>
           </div>
-          <div className="p-5 bg-white dark:bg-gray-800 rounded-3xl border border-gray-100 dark:border-gray-700 shadow-sm">
-            <div className="text-gray-500 dark:text-gray-400 text-sm mb-1">Volume Jual</div>
-            <div className="text-2xl font-bold text-gray-900 dark:text-white">{formatIDR(cardSell)}</div>
+          
+          <div className="p-6 bg-white dark:bg-gray-800 rounded-[2rem] border border-gray-100 dark:border-gray-700 shadow-sm transition-transform hover:scale-[1.02] active:scale-[0.98]">
+            <div className="flex justify-between items-start mb-2">
+              <div className="text-gray-500 dark:text-gray-400 text-sm font-medium">Volume Jual</div>
+              <div className="bg-emerald-50 dark:bg-emerald-900/20 p-1.5 rounded-xl">
+                <svg className="w-5 h-5 text-emerald-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+              </div>
+            </div>
+            <div className="text-2xl font-bold text-gray-900 dark:text-white tracking-tight">{formatIDR(cardSell)}</div>
+            <div className="mt-2 text-[10px] text-gray-400 uppercase tracking-widest font-semibold">
+              Total Penjualan
+            </div>
           </div>
         </div>
 

@@ -77,7 +77,8 @@ export function processSellForSession(
  * Get active sessions that have USDT available for selling
  */
 export function getActiveSessions(sessions: Session[]): Session[] {
-  return sessions.filter(s => s.status === 'active' || !s.status || s.remaining_usdt > 0);
+  // A session is active if its status is 'active' OR its remaining_usdt > 0.00000001 (floating point safety)
+  return sessions.filter(s => s.status === 'active' || !s.status || s.remaining_usdt > 0.00000001);
 }
 
 /**

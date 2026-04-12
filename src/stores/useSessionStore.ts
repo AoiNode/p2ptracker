@@ -493,7 +493,8 @@ export function computeSessionDashboard() {
   const saldoAkhir = dashboardData.totalInvestedIDR + dashboardData.totalRealizedProfit;
   
   // Count active sessions
-  const activeSessionsCount = sessions.filter((s: Session) => s.status === 'active' || !s.status).length;
+  // Fixed: use remaining_usdt > 0.00000001 check to match sessionManager and ensure sessions with residue stay active
+  const activeSessionsCount = sessions.filter((s: Session) => s.status === 'active' || s.remaining_usdt > 0.00000001).length;
   
   // Calculate today's profit
   const today = new Date();
