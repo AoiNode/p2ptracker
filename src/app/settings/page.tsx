@@ -21,6 +21,7 @@ export default function SettingsPage() {
 
   // Closing State
   const [showClosingConfirm, setShowClosingConfirm] = useState(false);
+  const [showClosingProgress, setShowClosingProgress] = useState(false);
   const [isClosing, setIsClosing] = useState(false);
   const [closingSteps, setClosingSteps] = useState<{
     snapshot: 'pending' | 'loading' | 'success' | 'error',
@@ -54,6 +55,7 @@ export default function SettingsPage() {
   };
 
   const handleMonthlyClosing = async () => {
+    setShowClosingProgress(true);
     setIsClosing(true);
     setClosingError(null);
     setActiveSnapshot([]);
@@ -147,7 +149,9 @@ export default function SettingsPage() {
       setClosingResult({
         show: true,
         type: 'success',
-        message: `Tutup Buku Berhasil! ${result.archiveStats.deleted_transactions} transaksi dihapus, ${result.archiveStats.deleted_sessions} sesi dihapus, ${result.archiveStats.restored_sessions} sesi aktif dipulihkan.`
+        message: result.warning
+          ? `Tutup Buku Berhasil! ${result.archiveStats.deleted_transactions} transaksi dihapus, ${result.archiveStats.deleted_sessions} sesi dihapus, ${result.archiveStats.restored_sessions} sesi aktif dipulihkan. (Catatan: ${result.warning})`
+          : `Tutup Buku Berhasil! ${result.archiveStats.deleted_transactions} transaksi dihapus, ${result.archiveStats.deleted_sessions} sesi dihapus, ${result.archiveStats.restored_sessions} sesi aktif dipulihkan.`
       });
 
       setTimeout(() => window.location.reload(), 5000);
@@ -220,73 +224,11 @@ export default function SettingsPage() {
                 </div>
               </div>
 
-              {/* Progress Steps UI */}
-              {isClosing || closingError ? (
-                <div className="space-y-4 mb-6 bg-gray-50 dark:bg-gray-900/50 p-4 rounded-2xl border border-gray-100 dark:border-gray-800">
-                  <div className="flex items-center justify-between">
-                    <span className="text-sm font-medium">1. Membaca Sesi Aktif</span>
-                    {closingSteps.snapshot === 'loading' && <div className="w-4 h-4 border-2 border-purple-600 border-t-transparent rounded-full animate-spin" />}
-                    {closingSteps.snapshot === 'success' && <span className="text-emerald-500 text-sm font-bold">DONE</span>}
-                    {closingSteps.snapshot === 'error' && <span className="text-rose-500 text-sm font-bold">ERROR</span>}
-                  </div>
-
-                  {activeSnapshot.length > 0 && (
-                    <div className="bg-white dark:bg-gray-800 rounded-xl p-3 border border-gray-100 dark:border-gray-700">
-                      <div className="text-xs font-semibold text-gray-600 dark:text-gray-300 mb-2">
-                        Tersisa {activeSnapshot.length} sesi aktif:
-                      </div>
-                      <div className="space-y-1 text-xs text-gray-600 dark:text-gray-300">
-                        {activeSnapshot.slice(0, 8).map((s: any, idx: number) => (
-                          <div key={s.id || idx} className="flex items-center justify-between">
-                            <span className="truncate pr-2">
-                              {s.remaining_usdt?.toFixed ? s.remaining_usdt.toFixed(2) : s.remaining_usdt} USDT
-                            </span>
-                            <span className="shrink-0 text-gray-500 dark:text-gray-400">
-                              @ {Math.round(Number(s.avg_cost ?? s.price_idr) || 0).toLocaleString('id-ID')}
-                            </span>
-                          </div>
-                        ))}
-                        {activeSnapshot.length > 8 && (
-                          <div className="text-[11px] text-gray-500 dark:text-gray-400">
-                            +{activeSnapshot.length - 8} sesi lainnya…
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                  )}
-
-                  <div className="flex items-center justify-between">
-                    <span className="text-sm font-medium">2. Menyiapkan Data Excel</span>
-                    {closingSteps.excel === 'loading' && <div className="w-4 h-4 border-2 border-purple-600 border-t-transparent rounded-full animate-spin" />}
-                    {closingSteps.excel === 'success' && <span className="text-emerald-500 text-sm font-bold">DONE</span>}
-                    {closingSteps.excel === 'error' && <span className="text-rose-500 text-sm font-bold">ERROR</span>}
-                  </div>
-                  <div className="flex items-center justify-between">
-                    <span className="text-sm font-medium">3. Mengirim ke Telegram Bot</span>
-                    {closingSteps.tele === 'loading' && <div className="w-4 h-4 border-2 border-purple-600 border-t-transparent rounded-full animate-spin" />}
-                    {closingSteps.tele === 'success' && <span className="text-emerald-500 text-sm font-bold">DONE</span>}
-                    {closingSteps.tele === 'error' && <span className="text-rose-500 text-sm font-bold">ERROR</span>}
-                  </div>
-                  <div className="flex items-center justify-between">
-                    <span className="text-sm font-medium">4. Reset & Pulihkan Sesi</span>
-                    {closingSteps.db === 'loading' && <div className="w-4 h-4 border-2 border-purple-600 border-t-transparent rounded-full animate-spin" />}
-                    {closingSteps.db === 'success' && <span className="text-emerald-500 text-sm font-bold">DONE</span>}
-                    {closingSteps.db === 'error' && <span className="text-rose-500 text-sm font-bold">ERROR</span>}
-                  </div>
-
-                  {closingError && (
-                    <div className="mt-4 p-3 bg-rose-50 dark:bg-rose-900/20 border border-rose-100 dark:border-rose-900/30 rounded-xl text-rose-600 dark:text-rose-400 text-xs font-mono break-words">
-                      ❌ Detail Error: {closingError}
-                    </div>
-                  )}
-                </div>
-              ) : (
-                <div className="mb-6 p-4 bg-blue-50 dark:bg-blue-900/20 rounded-2xl border border-blue-100 dark:border-blue-900/30">
-                  <p className="text-xs text-blue-700 dark:text-blue-300 leading-relaxed text-center italic">
-                    &quot;Gunakan fitur ini setiap akhir bulan untuk menjaga performa aplikasi tetap cepat. Data modal tetap aman.&quot;
-                  </p>
-                </div>
-              )}
+              <div className="mb-6 p-4 bg-blue-50 dark:bg-blue-900/20 rounded-2xl border border-blue-100 dark:border-blue-900/30">
+                <p className="text-xs text-blue-700 dark:text-blue-300 leading-relaxed text-center italic">
+                  &quot;Gunakan fitur ini setiap akhir bulan untuk menjaga performa aplikasi tetap cepat. Data modal tetap aman.&quot;
+                </p>
+              </div>
 
               <button
                 onClick={() => setShowClosingConfirm(true)}
@@ -528,6 +470,99 @@ export default function SettingsPage() {
               >
                 Tutup
               </button>
+            </div>
+          </div>
+        )}
+
+        {showClosingProgress && (
+          <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center px-4">
+            <div className="bg-white dark:bg-gray-800 rounded-2xl p-6 w-full max-w-md animate-slide-up border border-gray-100 dark:border-gray-700">
+              <div className="flex items-start justify-between mb-4">
+                <div>
+                  <h3 className="text-lg font-semibold text-gray-900 dark:text-white">Proses Tutup Buku</h3>
+                  <p className="text-xs text-gray-500 dark:text-gray-400">
+                    Jangan tutup halaman sampai selesai.
+                  </p>
+                </div>
+                {!isClosing && (
+                  <button
+                    onClick={() => setShowClosingProgress(false)}
+                    className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
+                  >
+                    ✕
+                  </button>
+                )}
+              </div>
+
+              <div className="space-y-3 mb-4 bg-gray-50 dark:bg-gray-900/50 p-4 rounded-2xl border border-gray-100 dark:border-gray-800">
+                <div className="flex items-center justify-between">
+                  <span className="text-sm font-medium text-gray-900 dark:text-white">1. Membaca Sesi Aktif</span>
+                  {closingSteps.snapshot === 'loading' && <div className="w-4 h-4 border-2 border-purple-600 border-t-transparent rounded-full animate-spin" />}
+                  {closingSteps.snapshot === 'success' && <span className="text-emerald-500 text-sm font-bold">DONE</span>}
+                  {closingSteps.snapshot === 'error' && <span className="text-rose-500 text-sm font-bold">ERROR</span>}
+                </div>
+
+                {activeSnapshot.length > 0 && (
+                  <div className="bg-white dark:bg-gray-800 rounded-xl p-3 border border-gray-100 dark:border-gray-700">
+                    <div className="text-xs font-semibold text-gray-600 dark:text-gray-300 mb-2">
+                      Tersisa {activeSnapshot.length} sesi aktif:
+                    </div>
+                    <div className="space-y-1 text-xs text-gray-600 dark:text-gray-300">
+                      {activeSnapshot.slice(0, 10).map((s: any, idx: number) => (
+                        <div key={s.id || idx} className="flex items-center justify-between">
+                          <span className="truncate pr-2">
+                            {s.remaining_usdt?.toFixed ? s.remaining_usdt.toFixed(2) : s.remaining_usdt} USDT
+                          </span>
+                          <span className="shrink-0 text-gray-500 dark:text-gray-400">
+                            @ {Math.round(Number(s.avg_cost ?? s.price_idr) || 0).toLocaleString('id-ID')}
+                          </span>
+                        </div>
+                      ))}
+                      {activeSnapshot.length > 10 && (
+                        <div className="text-[11px] text-gray-500 dark:text-gray-400">
+                          +{activeSnapshot.length - 10} sesi lainnya…
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
+
+                <div className="flex items-center justify-between">
+                  <span className="text-sm font-medium text-gray-900 dark:text-white">2. Menyiapkan Data Excel</span>
+                  {closingSteps.excel === 'loading' && <div className="w-4 h-4 border-2 border-purple-600 border-t-transparent rounded-full animate-spin" />}
+                  {closingSteps.excel === 'success' && <span className="text-emerald-500 text-sm font-bold">DONE</span>}
+                  {closingSteps.excel === 'error' && <span className="text-rose-500 text-sm font-bold">ERROR</span>}
+                </div>
+
+                <div className="flex items-center justify-between">
+                  <span className="text-sm font-medium text-gray-900 dark:text-white">3. Mengirim ke Telegram Bot</span>
+                  {closingSteps.tele === 'loading' && <div className="w-4 h-4 border-2 border-purple-600 border-t-transparent rounded-full animate-spin" />}
+                  {closingSteps.tele === 'success' && <span className="text-emerald-500 text-sm font-bold">DONE</span>}
+                  {closingSteps.tele === 'error' && <span className="text-rose-500 text-sm font-bold">ERROR</span>}
+                </div>
+
+                <div className="flex items-center justify-between">
+                  <span className="text-sm font-medium text-gray-900 dark:text-white">4. Reset & Pulihkan Sesi</span>
+                  {closingSteps.db === 'loading' && <div className="w-4 h-4 border-2 border-purple-600 border-t-transparent rounded-full animate-spin" />}
+                  {closingSteps.db === 'success' && <span className="text-emerald-500 text-sm font-bold">DONE</span>}
+                  {closingSteps.db === 'error' && <span className="text-rose-500 text-sm font-bold">ERROR</span>}
+                </div>
+
+                {closingError && (
+                  <div className="mt-2 p-3 bg-rose-50 dark:bg-rose-900/20 border border-rose-100 dark:border-rose-900/30 rounded-xl text-rose-600 dark:text-rose-400 text-xs font-mono break-words">
+                    ❌ Detail Error: {closingError}
+                  </div>
+                )}
+              </div>
+
+              {!isClosing && (
+                <button
+                  onClick={() => setShowClosingProgress(false)}
+                  className="w-full py-3 bg-gray-100 hover:bg-gray-200 dark:bg-gray-700 dark:hover:bg-gray-600 text-gray-900 dark:text-white font-semibold rounded-2xl transition-all"
+                >
+                  Tutup
+                </button>
+              )}
             </div>
           </div>
         )}
