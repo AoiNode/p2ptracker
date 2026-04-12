@@ -44,6 +44,7 @@ BEGIN
     WHERE user_id = target_user_id;
 
     -- Step 2.5: Fix missing session_id in BUY transactions (link orphans)
+    -- More lenient match for imported data (10 seconds)
     UPDATE transactions t
     SET session_id = s.id
     FROM sessions s
@@ -52,7 +53,7 @@ BEGIN
       AND t.session_id IS NULL
       AND s.user_id = t.user_id
       AND s.price_idr = t.price_idr
-      AND ABS(EXTRACT(EPOCH FROM (s.created_at - t.tx_time))) < 1; -- Match within 1 second
+      AND ABS(EXTRACT(EPOCH FROM (s.created_at - t.tx_time))) < 10; -- Match within 10 seconds
 
     -- Step 3: Optimize with a temporary index if needed, but since we filter by user_id and tx_time, 
     -- let's just make sure we use a good query plan.

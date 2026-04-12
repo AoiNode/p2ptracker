@@ -26,11 +26,13 @@ export default function TransaksiPage() {
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [showFilters, setShowFilters] = useState(false);
   
-  // Use enrichedTxs if available, otherwise fallback to storeTxs
-  // We need to merge them because enrichedTxs might be limited (e.g. recent 100)
-  // while storeTxs has everything but no profit details.
-  // Actually, let's try to fetch ALL enriched txs using the RPC with high limit.
-  const txs = enrichedTxs.length > 0 ? enrichedTxs : storeTxs;
+  // Merge logic:
+  // 1. Get IDs from enrichedTxs
+  // 2. Filter storeTxs that are NOT in enrichedTxs (this captures brand new ones)
+  // 3. Combine them
+  const enrichedIds = new Set(enrichedTxs.map(t => t.id).filter(Boolean));
+  const newTxs = storeTxs.filter(t => t.id && !enrichedIds.has(t.id));
+  const txs = [...newTxs, ...enrichedTxs];
 
   // REMOVE DUPLICATE useEffect and fetchEnrichedTransactions here since I moved them up
   
