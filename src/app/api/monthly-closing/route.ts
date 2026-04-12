@@ -59,7 +59,8 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ success: true, message: 'File dikirim, pembersihan dilewati.' });
     }
 
-    const { data: archiveData, error: archiveError } = await supabase.rpc('archive_closed_data', {
+    // Call the new V2 RPC with SECURITY DEFINER
+    const { data: archiveData, error: archiveError } = await supabase.rpc('archive_closed_data_v2', {
       target_user_id: user.id
     });
 

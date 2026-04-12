@@ -157,7 +157,8 @@ export default function SettingsPage() {
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) throw new Error("Silakan login kembali");
 
-      const { data: archiveData, error: archiveError } = await supabase.rpc('archive_closed_data', {
+      // Call the new V2 RPC
+      const { data: archiveData, error: archiveError } = await supabase.rpc('archive_closed_data_v2', {
         target_user_id: session.user.id
       });
 
