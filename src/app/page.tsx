@@ -57,8 +57,8 @@ export default function HomePage(){
   const dashboardTodayPL = stats.todayProfit;
 
   const displayTotalBuy = stats.totalBuyVolume !== 0 ? stats.totalBuyVolume : s.totalBuy;
-  const displayTotalRemainingUSDT = stats.totalRemainingUSDT !== 0 ? stats.totalRemainingUSDT : s.capitalUSDT;
-  const displayROI = stats.roi !== 0 ? stats.roi : s.roi;
+  const displayTotalRemainingUSDT = s.capitalUSDT; // stats from server doesn't have totalRemainingUSDT yet
+  const displayROI = stats.totalBuyVolume > 0 ? (stats.totalProfit / stats.totalBuyVolume * 100) : s.roi;
 
   // Use recent activities from RPC if available, otherwise fallback to store transactions
   const displayTransactions = recentActivities.length > 0 ? recentActivities : transactions;
