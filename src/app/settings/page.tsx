@@ -80,9 +80,72 @@ export default function SettingsPage() {
       const { transactions, sessionSales } = useSessionStore.getState();
       const XLSX = await import('xlsx');
       const wb = XLSX.utils.book_new();
+
+      const monthKeys = Array.from(new Set([
+        ...transactions.map(t => dayjs(t.tx_time).format('YYYY-MM')),
+        ...sessionSales.map(s => dayjs(s.created_at).format('YYYY-MM'))
+      ])).sort();
+
+      const monthlyRows = monthKeys.map((key) => {
+        const monthStart = dayjs(`${key}-01`).startOf('month');
+        const monthEnd = monthStart.endOf('month');
+
+        const startMs = monthStart.valueOf();
+        const endMs = monthEnd.valueOf();
+
+        const monthTxs = transactions.filter(t => {
+          const ms = dayjs(t.tx_time).valueOf();
+          return ms >= startMs && ms <= endMs;
+        });
+
+        const monthBuys = monthTxs.filter(t => t.type === 'BUY');
+        const monthSells = monthTxs.filter(t => t.type === 'SELL');
+
+        const totalBuyIdr = monthBuys.reduce((sum, t) => sum + Number(t.total_idr || 0), 0);
+        const totalSellIdr = monthSells.reduce((sum, t) => sum + Number(t.total_idr || 0), 0);
+
+        const monthSales = sessionSales.filter(s => {
+          const ms = dayjs(s.created_at).valueOf();
+          return ms >= startMs && ms <= endMs;
+        });
+        const totalProfitIdr = monthSales.reduce((sum, s) => sum + Number(s.profit_idr || 0), 0);
+
+        return {
+          Periode: `${monthStart.format('YYYY-MM')} (${monthStart.format('DD MMM')} - ${monthEnd.format('DD MMM')})`,
+          Mulai: monthStart.format('YYYY-MM-DD'),
+          Sampai: monthEnd.format('YYYY-MM-DD'),
+          Profit_IDR: totalProfitIdr,
+          Beli_IDR: totalBuyIdr,
+          Jual_IDR: totalSellIdr,
+          Jumlah_Transaksi: monthTxs.length,
+          Jumlah_Sell: monthSales.length
+        };
+      });
+
+      const totalProfitAll = monthlyRows.reduce((sum, r) => sum + Number(r.Profit_IDR || 0), 0);
+      const totalBuyAll = monthlyRows.reduce((sum, r) => sum + Number(r.Beli_IDR || 0), 0);
+      const totalSellAll = monthlyRows.reduce((sum, r) => sum + Number(r.Jual_IDR || 0), 0);
+      const totalTxAll = monthlyRows.reduce((sum, r) => sum + Number(r.Jumlah_Transaksi || 0), 0);
+      const totalSellCountAll = monthlyRows.reduce((sum, r) => sum + Number(r.Jumlah_Sell || 0), 0);
+
+      const summarySheet = XLSX.utils.json_to_sheet([
+        ...monthlyRows,
+        {
+          Periode: 'TOTAL',
+          Mulai: '',
+          Sampai: '',
+          Profit_IDR: totalProfitAll,
+          Beli_IDR: totalBuyAll,
+          Jual_IDR: totalSellAll,
+          Jumlah_Transaksi: totalTxAll,
+          Jumlah_Sell: totalSellCountAll
+        }
+      ]);
+      XLSX.utils.book_append_sheet(wb, summarySheet, "Ringkasan_Bulanan");
       
       const txSheet = XLSX.utils.json_to_sheet(transactions.map(t => ({
         Tanggal: dayjs(t.tx_time).format('YYYY-MM-DD HH:mm'),
+        Bulan: dayjs(t.tx_time).format('YYYY-MM'),
         Tipe: t.type,
         Exchange: t.label,
         Harga: t.price_idr,
@@ -94,6 +157,7 @@ export default function SettingsPage() {
 
       const profitSheet = XLSX.utils.json_to_sheet(sessionSales.map(s => ({
         Tanggal_Jual: dayjs(s.created_at).format('YYYY-MM-DD HH:mm'),
+        Bulan: dayjs(s.created_at).format('YYYY-MM'),
         USDT_Terjual: s.sold_usdt,
         Modal_IDR: s.cost_idr,
         Pendapatan_IDR: s.proceeds_idr,
