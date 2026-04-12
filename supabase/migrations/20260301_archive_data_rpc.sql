@@ -8,34 +8,43 @@ DECLARE
     v_deleted_sessions INTEGER := 0;
 BEGIN
     -- 1. Delete session_sales for CLOSED sessions
-    -- Using EXISTS for better performance on large datasets
+    -- Using a batch to avoid locking
     DELETE FROM session_sales ss
-    WHERE EXISTS (
-        SELECT 1 FROM sessions s 
-        WHERE s.id = ss.session_id 
-        AND s.user_id = target_user_id 
+    WHERE ss.id IN (
+        SELECT ss2.id FROM session_sales ss2
+        JOIN sessions s ON s.id = ss2.session_id
+        WHERE s.user_id = target_user_id 
         AND s.status = 'closed'
+        LIMIT 10000 -- Batch size
     )
     RETURNING count(*) INTO v_deleted_sales;
 
     -- 2. Delete Transactions
-    -- We delete ALL SELL transactions (archived in Excel)
-    -- and BUY transactions linked to CLOSED sessions
+    -- Delete all SELL transactions (already archived in Excel)
+    -- AND BUY transactions that are closed or orphaned
     DELETE FROM transactions t
-    WHERE t.user_id = target_user_id
-    AND (
-        t.type = 'SELL'
-        OR (t.type = 'BUY' AND (
-            t.session_id IS NULL 
-            OR EXISTS (SELECT 1 FROM sessions s WHERE s.id = t.session_id AND s.status = 'closed')
-        ))
+    WHERE t.id IN (
+        SELECT t2.id FROM transactions t2
+        WHERE t2.user_id = target_user_id
+        AND (
+            t2.type = 'SELL'
+            OR (t2.type = 'BUY' AND (
+                t2.session_id IS NULL 
+                OR EXISTS (SELECT 1 FROM sessions s WHERE s.id = t2.session_id AND s.status = 'closed')
+            ))
+        )
+        LIMIT 10000 -- Batch size
     )
     RETURNING count(*) INTO v_deleted_txs;
 
     -- 3. Delete CLOSED sessions
     DELETE FROM sessions
-    WHERE user_id = target_user_id 
-    AND status = 'closed'
+    WHERE id IN (
+        SELECT id FROM sessions 
+        WHERE user_id = target_user_id 
+        AND status = 'closed'
+        LIMIT 10000 -- Batch size
+    )
     RETURNING count(*) INTO v_deleted_sessions;
 
     RETURN jsonb_build_object(

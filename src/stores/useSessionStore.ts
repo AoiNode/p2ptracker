@@ -403,7 +403,7 @@ export const useSessionStore = create<State & Actions>((set, get) => ({
       .select("*")
       .eq('user_id', user.id)
       .order("tx_time", { ascending: false })
-      .limit(5000); 
+      .limit(50000); // Increased from 5000 to 50000 for full export support
     
     // Fetch session_sales for the sessions we just fetched
     const sessionIds = sessions?.map((s: Session) => s.id).filter(Boolean) || [];
@@ -420,7 +420,7 @@ export const useSessionStore = create<State & Actions>((set, get) => ({
         `)
         .in('session_id', sessionIds)
         .order("created_at", { ascending: false })
-        .limit(10000);
+        .limit(50000); // Increased from 10000 to 50000
       
       sales = salesData || [];
     }
