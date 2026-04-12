@@ -146,68 +146,30 @@ export const useSessionStore = create<State & Actions>((set, get) => ({
     };
     
     try {
-      // Check for existing session with same price and remaining USDT > 0 for this user
-      const { data: existingSessions, error: fetchError } = await supabase
+      // ALWAYS create a NEW unique session for each BUY transaction
+      // This ensures 1-to-1 mapping and avoids confusion when viewing history
+      const session = {
+        created_at: tx_time,
+        user_id: user.id,
+        price_idr: price_idr,
+        total_invest_idr: total_idr,
+        total_usdt: amount_usdt,
+        avg_cost: price_idr,
+        remaining_usdt: amount_usdt,
+        realized_profit_idr: 0,
+        status: 'active'
+      };
+      
+      const { data: sessionData, error: sessionError } = await supabase
         .from('sessions')
-        .select('*')
-        .eq('user_id', user.id)
-        .eq('price_idr', price_idr)
-        .gt('remaining_usdt', 0)
-        .order('created_at', { ascending: false })
-        .limit(1);
+        .insert([session])
+        .select()
+        .single();
         
-      if (fetchError) throw fetchError;
+      if (sessionError) throw sessionError;
+      const sessionId = sessionData.id;
       
-      let sessionId: string;
-      
-      if (existingSessions && existingSessions.length > 0) {
-        // Merge with existing session
-        const existingSession = existingSessions[0];
-        const new_total_usdt = existingSession.remaining_usdt + amount_usdt;
-        const new_total_invest_idr = existingSession.total_invest_idr + total_idr;
-        const new_avg_cost = new_total_invest_idr / new_total_usdt;
-        
-        // Update existing session
-        const { data: updatedSession, error: updateError } = await supabase
-          .from('sessions')
-          .update({
-            total_invest_idr: new_total_invest_idr,
-            total_usdt: existingSession.total_usdt + amount_usdt,
-            avg_cost: new_avg_cost,
-            remaining_usdt: new_total_usdt
-          })
-          .eq('id', existingSession.id)
-          .select()
-          .single();
-          
-        if (updateError) throw updateError;
-        sessionId = existingSession.id;
-        
-      } else {
-        // Create new session
-        const session = {
-          created_at: tx_time,
-          user_id: user.id,
-          price_idr: price_idr,
-          total_invest_idr: total_idr,
-          total_usdt: amount_usdt,
-          avg_cost: price_idr,
-          remaining_usdt: amount_usdt,
-          realized_profit_idr: 0,
-          status: 'active'
-        };
-        
-        const { data: sessionData, error: sessionError } = await supabase
-          .from('sessions')
-          .insert([session])
-          .select()
-          .single();
-          
-        if (sessionError) throw sessionError;
-        sessionId = sessionData.id;
-      }
-      
-      // Insert transaction with session_id
+      // Insert transaction with the newly created session_id
       const { data: txData, error: txError } = await supabase
         .from('transactions')
         .insert([{ ...newTx, session_id: sessionId }])

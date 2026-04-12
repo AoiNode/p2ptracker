@@ -43,11 +43,26 @@ BEGIN
         status = 'active'
     WHERE user_id = target_user_id;
 
+    -- Step 2.5: Fix missing session_id in BUY transactions (link orphans)
+    UPDATE transactions t
+    SET session_id = s.id
+    FROM sessions s
+    WHERE t.user_id = target_user_id 
+      AND t.type = 'BUY' 
+      AND t.session_id IS NULL
+      AND s.user_id = t.user_id
+      AND s.price_idr = t.price_idr
+      AND ABS(EXTRACT(EPOCH FROM (s.created_at - t.tx_time))) < 1; -- Match within 1 second
+
+    -- Step 3: Optimize with a temporary index if needed, but since we filter by user_id and tx_time, 
+    -- let's just make sure we use a good query plan.
+    
     -- 4. Process SELL transactions (FIFO)
     FOR r_tx IN 
-        SELECT * FROM transactions 
+        SELECT id, amount_usdt, fee_idr, price_idr, tx_time 
+        FROM transactions 
         WHERE user_id = target_user_id AND type = 'SELL' 
-        ORDER BY tx_time ASC
+        ORDER BY tx_time ASC, id ASC -- Added id as tie-breaker
     LOOP
         v_total_sell_txs := v_total_sell_txs + 1;
         v_remaining_to_sell := r_tx.amount_usdt;
@@ -60,14 +75,13 @@ BEGIN
         END IF;
         
         -- Iterate through eligible sessions (FIFO)
-        -- We must select current state directly from table for each iteration
-        -- because previous loop iterations might have updated the sessions
         FOR r_session IN 
-            SELECT * FROM sessions 
+            SELECT id, remaining_usdt, avg_cost, realized_profit_idr 
+            FROM sessions 
             WHERE user_id = target_user_id 
             AND created_at <= r_tx.tx_time 
             AND remaining_usdt > 0.000001
-            ORDER BY created_at ASC
+            ORDER BY created_at ASC, id ASC -- Added id as tie-breaker
         LOOP
             IF v_remaining_to_sell <= 0.000001 THEN
                 EXIT; -- Break inner loop if satisfied
@@ -107,6 +121,9 @@ BEGIN
         END LOOP;
         
         v_processed_txs := v_processed_txs + 1;
+        
+        -- Optional: Commit every 100 TXs if possible in PG, but PL/pgSQL doesn't support 
+        -- commits inside loops easily without procedures. For RPC functions, it's one transaction.
     END LOOP;
     
     RETURN jsonb_build_object(
