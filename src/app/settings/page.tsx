@@ -29,7 +29,16 @@ export default function SettingsPage() {
   // Closing State
   const [showClosingConfirm, setShowClosingConfirm] = useState(false);
   const [isClosing, setIsClosing] = useState(false);
-  const [closingStep, setClosingStep] = useState<'idle' | 'exporting' | 'sending' | 'cleaning'>('idle');
+  const [closingSteps, setClosingSteps] = useState<{
+    excel: 'pending' | 'loading' | 'success' | 'error',
+    tele: 'pending' | 'loading' | 'success' | 'error',
+    db: 'pending' | 'loading' | 'success' | 'error'
+  }>({
+    excel: 'pending',
+    tele: 'pending',
+    db: 'pending'
+  });
+  const [closingError, setClosingError] = useState<string | null>(null);
   const [closingResult, setClosingResult] = useState<{show: boolean, type: 'success' | 'error', message: string}>({
     show: false,
     type: 'success',
@@ -48,17 +57,17 @@ export default function SettingsPage() {
     }
   };
 
-  const handleMonthlyClosing = async (skipCleaning = false) => {
+  const handleMonthlyClosing = async () => {
     setIsClosing(true);
-    setClosingStep('exporting');
+    setClosingError(null);
+    setClosingSteps({ excel: 'loading', tele: 'pending', db: 'pending' });
+    
     try {
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) throw new Error("Silakan login kembali");
 
-      // 1. Get current month data from store
+      // 1. Prepare Excel
       const { transactions, sessionSales } = useSessionStore.getState();
-      
-      // 2. Prepare Excel
       const XLSX = await import('xlsx');
       const wb = XLSX.utils.book_new();
       
@@ -83,20 +92,17 @@ export default function SettingsPage() {
       XLSX.utils.book_append_sheet(wb, profitSheet, "Profit_FIFO");
 
       const wbout = XLSX.write(wb, { bookType: 'xlsx', type: 'base64' });
+      setClosingSteps(prev => ({ ...prev, excel: 'success', tele: 'loading' }));
 
-      // 3. Get Chat ID
-      setClosingStep('sending');
+      // 2. Get Chat ID & Send to Telegram
       const linkResponse = await fetch('/api/telegram/link', {
         headers: { 'Authorization': `Bearer ${session.access_token}` }
       });
       const linkData = await linkResponse.json();
       if (!linkData.linked || !linkData.account?.telegram_user_id) {
-        throw new Error("Bot Telegram belum terhubung.");
+        throw new Error("Tahap Telegram: Bot belum terhubung.");
       }
 
-      // 4. Send to API
-      if (!skipCleaning) setClosingStep('cleaning');
-      
       const res = await fetch('/api/monthly-closing', {
         method: 'POST',
         headers: {
@@ -107,80 +113,44 @@ export default function SettingsPage() {
           excelData: wbout,
           fileName: `Rekap_P2P_${dayjs().format('MMM_YYYY')}.xlsx`,
           chatId: linkData.account.telegram_user_id,
-          skipCleaning: skipCleaning
+          skipCleaning: false
         })
       });
 
       const result = await res.json();
+      
       if (!res.ok) {
-        if (result.partialSuccess) {
-          setClosingResult({
-            show: true,
-            type: 'error',
-            message: result.error
-          });
-          return;
+        if (result.error?.includes('Telegram')) {
+          setClosingSteps(prev => ({ ...prev, tele: 'error' }));
+        } else {
+          setClosingSteps(prev => ({ ...prev, tele: 'success', db: 'error' }));
         }
-        throw new Error(result.error);
+        throw new Error(result.error || "Gagal dalam proses Tutup Buku");
       }
 
+      setClosingSteps({ excel: 'success', tele: 'success', db: 'success' });
+      
       setClosingResult({
         show: true,
         type: 'success',
-        message: skipCleaning 
-          ? "Rekap Excel berhasil dikirim ke Telegram!" 
-          : `Tutup Buku Berhasil! Rekap dikirim ke Telegram. ${result.archiveStats.deleted_transactions} data lama dibersihkan.`
+        message: `Tutup Buku Berhasil! ${result.archiveStats.deleted_transactions} data lama dibersihkan. Sesi aktif tetap aman.`
       });
 
-      if (!skipCleaning) {
-        setTimeout(() => window.location.reload(), 5000);
-      }
+      setTimeout(() => window.location.reload(), 5000);
 
     } catch (e: any) {
       console.error(e);
-      setClosingResult({
-        show: true,
-        type: 'error',
-        message: e.message || "Gagal melakukan tutup buku"
+      setClosingError(e.message);
+      // Determine which step failed if not already set
+      setClosingSteps(prev => {
+        if (prev.excel === 'loading') return { ...prev, excel: 'error' };
+        if (prev.tele === 'loading') return { ...prev, tele: 'error' };
+        if (prev.db === 'loading') return { ...prev, db: 'error' };
+        return prev;
       });
     } finally {
       setIsClosing(false);
-      setClosingStep('idle');
       setShowClosingConfirm(false);
-    }
-  };
-
-  const handleOnlyCleaning = async () => {
-    setIsClosing(true);
-    setClosingStep('cleaning');
-    try {
-      const { data: { session } } = await supabase.auth.getSession();
-      if (!session) throw new Error("Silakan login kembali");
-
-      // Call the new V2 RPC
-      const { data: archiveData, error: archiveError } = await supabase.rpc('archive_closed_data_v2', {
-        target_user_id: session.user.id
-      });
-
-      if (archiveError) throw archiveError;
-
-      setClosingResult({
-        show: true,
-        type: 'success',
-        message: `Database berhasil dibersihkan! ${archiveData.deleted_transactions} data lama dihapus.`
-      });
-
-      setTimeout(() => window.location.reload(), 3000);
-    } catch (e: any) {
-      console.error(e);
-      setClosingResult({
-        show: true,
-        type: 'error',
-        message: e.message || "Gagal membersihkan database"
-      });
-    } finally {
-      setIsClosing(false);
-      setClosingStep('idle');
     }
   };
 
@@ -338,84 +308,65 @@ export default function SettingsPage() {
         </div>
         
         <div className="space-y-8">
-          {/* Section: Troubleshoot Data */}
+          {/* Section: Tutup Buku */}
           <section>
             <h2 className="text-sm font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-3 px-1">
-              Bantuan & Perbaikan Data
+              Manajemen Data
             </h2>
-            <div className="bg-white dark:bg-gray-800 rounded-3xl p-2 shadow-sm border border-gray-100 dark:border-gray-700">
-              {/* Monthly Closing */}
-              <div className="p-4 hover:bg-purple-50 dark:hover:bg-purple-900/20 rounded-2xl transition-colors group">
-                <div className="flex items-center justify-between mb-3">
-                  <div className="flex items-center gap-4">
-                    <div className="w-10 h-10 rounded-xl bg-purple-50 dark:bg-purple-900/20 flex items-center justify-center text-xl text-purple-600 font-bold">
-                      {isClosing ? (
-                        <div className="w-5 h-5 border-2 border-purple-600 border-t-transparent rounded-full animate-spin" />
-                      ) : "📊"}
-                    </div>
-                    <div>
-                      <div className="font-medium text-gray-900 dark:text-white">Tutup Buku Bulanan</div>
-                      <div className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
-                        {closingStep === 'exporting' ? '📊 Menyiapkan Excel...' : 
-                         closingStep === 'sending' ? '📤 Mengirim ke Telegram...' :
-                         closingStep === 'cleaning' ? '🧹 Membersihkan Database...' :
-                         'Kirim rekap Excel & reset riwayat'}
-                      </div>
-                    </div>
-                  </div>
+            <div className="bg-white dark:bg-gray-800 rounded-3xl p-6 shadow-sm border border-gray-100 dark:border-gray-700">
+              <div className="flex items-center gap-4 mb-6">
+                <div className="w-12 h-12 rounded-2xl bg-purple-100 dark:bg-purple-900/30 flex items-center justify-center text-2xl">
+                  📊
                 </div>
-                <div className="flex gap-2">
-                  <button 
-                    onClick={() => setShowClosingConfirm(true)}
-                    disabled={isClosing}
-                    className="flex-1 py-2 bg-purple-600 hover:bg-purple-700 text-white text-xs font-bold rounded-xl transition-all shadow-md shadow-purple-600/20 disabled:opacity-50"
-                  >
-                    Tutup Buku
-                  </button>
-                  <button 
-                    onClick={() => handleMonthlyClosing(true)}
-                    disabled={isClosing}
-                    className="px-3 py-2 border border-purple-200 dark:border-purple-800 text-purple-600 dark:text-purple-400 text-[10px] font-bold rounded-xl hover:bg-purple-50 transition-all disabled:opacity-50"
-                  >
-                    Hanya Kirim Excel
-                  </button>
+                <div>
+                  <h3 className="font-bold text-gray-900 dark:text-white text-lg">Tutup Buku Bulanan</h3>
+                  <p className="text-sm text-gray-500 dark:text-gray-400">Ekspor rekap & bersihkan riwayat lama</p>
                 </div>
               </div>
 
-              <div className="h-px bg-gray-100 dark:bg-gray-700 mx-4 my-1" />
-
-              {/* Fix Profit */}
-              <div className="p-4 hover:bg-yellow-50 dark:hover:bg-yellow-900/20 rounded-2xl transition-colors group">
-                <div className="flex items-center justify-between mb-3">
-                  <div className="flex items-center gap-4">
-                    <div className="w-10 h-10 rounded-xl bg-yellow-50 dark:bg-yellow-900/20 flex items-center justify-center text-xl">
-                      {isFixing ? (
-                        <div className="w-5 h-5 border-2 border-yellow-600 border-t-transparent rounded-full animate-spin" />
-                      ) : "🛠️"}
-                    </div>
-                    <div>
-                      <div className="font-medium text-gray-900 dark:text-white">Sinkronisasi Sesi</div>
-                      <div className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">Perbaiki sisa saldo USDT yang tidak akurat</div>
-                    </div>
+              {/* Progress Steps UI */}
+              {isClosing || closingError ? (
+                <div className="space-y-4 mb-6 bg-gray-50 dark:bg-gray-900/50 p-4 rounded-2xl border border-gray-100 dark:border-gray-800">
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm font-medium">1. Menyiapkan Data Excel</span>
+                    {closingSteps.excel === 'loading' && <div className="w-4 h-4 border-2 border-purple-600 border-t-transparent rounded-full animate-spin" />}
+                    {closingSteps.excel === 'success' && <span className="text-emerald-500 text-sm font-bold">DONE</span>}
+                    {closingSteps.excel === 'error' && <span className="text-rose-500 text-sm font-bold">ERROR</span>}
                   </div>
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm font-medium">2. Mengirim ke Telegram Bot</span>
+                    {closingSteps.tele === 'loading' && <div className="w-4 h-4 border-2 border-purple-600 border-t-transparent rounded-full animate-spin" />}
+                    {closingSteps.tele === 'success' && <span className="text-emerald-500 text-sm font-bold">DONE</span>}
+                    {closingSteps.tele === 'error' && <span className="text-rose-500 text-sm font-bold">ERROR</span>}
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm font-medium">3. Membersihkan Database</span>
+                    {closingSteps.db === 'loading' && <div className="w-4 h-4 border-2 border-purple-600 border-t-transparent rounded-full animate-spin" />}
+                    {closingSteps.db === 'success' && <span className="text-emerald-500 text-sm font-bold">DONE</span>}
+                    {closingSteps.db === 'error' && <span className="text-rose-500 text-sm font-bold">ERROR</span>}
+                  </div>
+
+                  {closingError && (
+                    <div className="mt-4 p-3 bg-rose-50 dark:bg-rose-900/20 border border-rose-100 dark:border-rose-900/30 rounded-xl text-rose-600 dark:text-rose-400 text-xs font-mono break-words">
+                      ❌ Detail Error: {closingError}
+                    </div>
+                  )}
                 </div>
-                <div className="flex gap-2">
-                  <button 
-                    onClick={() => setShowFixConfirm(true)}
-                    disabled={isFixing || isClosing}
-                    className="flex-1 py-2 bg-yellow-500 hover:bg-yellow-600 text-white text-xs font-bold rounded-xl transition-all shadow-md shadow-yellow-500/20 disabled:opacity-50"
-                  >
-                    Sinkronkan Sekarang
-                  </button>
-                  <button 
-                    onClick={handleOnlyCleaning}
-                    disabled={isFixing || isClosing}
-                    className="px-3 py-2 border border-yellow-200 dark:border-yellow-800 text-yellow-600 dark:text-yellow-400 text-[10px] font-bold rounded-xl hover:bg-yellow-50 transition-all disabled:opacity-50"
-                  >
-                    Hanya Bersihkan Data
-                  </button>
+              ) : (
+                <div className="mb-6 p-4 bg-blue-50 dark:bg-blue-900/20 rounded-2xl border border-blue-100 dark:border-blue-900/30">
+                  <p className="text-xs text-blue-700 dark:text-blue-300 leading-relaxed text-center italic">
+                    "Gunakan fitur ini setiap akhir bulan untuk menjaga performa aplikasi tetap cepat. Data modal tetap aman."
+                  </p>
                 </div>
-              </div>
+              )}
+
+              <button
+                onClick={() => setShowClosingConfirm(true)}
+                disabled={isClosing}
+                className="w-full py-4 bg-purple-600 hover:bg-purple-700 text-white font-bold rounded-2xl transition-all shadow-lg shadow-purple-600/25 disabled:opacity-50 flex items-center justify-center gap-2"
+              >
+                {isClosing ? 'Sedang Diproses...' : 'Mulai Tutup Buku'}
+              </button>
             </div>
           </section>
 
