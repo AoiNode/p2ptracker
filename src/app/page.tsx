@@ -50,7 +50,7 @@ export default function HomePage(){
     }
   }, [user, fetchAllSessions, fetchStats, fetchDashboardStats]);
 
-  const activeSessionsCount = sessions.filter(sess => sess.status === 'active').length;
+  const activeSessionsCount = sessions.filter(sess => sess.status === 'active' || sess.remaining_usdt > 0.00000001).length;
   
   // Use server-side stats for Dashboard if available
   const dashboardMonthlyPL = stats.monthlyProfit;

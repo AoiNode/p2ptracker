@@ -12,7 +12,7 @@ export default function SessionsPage() {
   const [loading, setLoading] = useState(true);
   
   // Filter to only show active sessions
-  const activeSessions = sessions.filter(s => s.status === 'active' || !s.status);
+  const activeSessions = sessions.filter(s => s.status === 'active' || s.remaining_usdt > 0.00000001);
 
   useEffect(() => {
     fetchAllSessions().then(() => setLoading(false));

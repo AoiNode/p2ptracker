@@ -475,7 +475,7 @@ export const useSessionStore = create<State & Actions>((set, get) => ({
     const { sessions } = get();
     // Filter active sessions and sort by created_at (oldest first for FIFO)
     return sessions
-      .filter((s: Session) => s.status === 'active' && s.remaining_usdt > 0)
+      .filter((s: Session) => (s.status === 'active' || s.remaining_usdt > 0.00000001))
       .sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime());
   }
 }));
