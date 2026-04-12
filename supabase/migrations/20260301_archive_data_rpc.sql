@@ -7,8 +7,7 @@ DECLARE
     v_deleted_sales INTEGER := 0;
     v_deleted_sessions INTEGER := 0;
 BEGIN
-    -- 1. Delete session_sales for CLOSED sessions that are NOT linked to any active sessions
-    -- This is safe because we already have the summary in the session table
+    -- 1. Delete session_sales for CLOSED sessions
     DELETE FROM session_sales
     WHERE session_id IN (
         SELECT id FROM sessions 
@@ -17,26 +16,24 @@ BEGIN
     )
     RETURNING count(*) INTO v_deleted_sales;
 
-    -- 2. Delete CLOSED sessions
-    -- We can delete them because their total profit is already reflected in the stats
-    -- and they no longer have USDT to sell.
+    -- 2. Delete Transactions
+    -- We delete ALL SELL transactions (they are archived in Excel)
+    -- We delete BUY transactions linked to CLOSED sessions
+    -- We delete BUY transactions that have no session (orphans)
+    DELETE FROM transactions
+    WHERE user_id = target_user_id
+    AND (
+        type = 'SELL'
+        OR (type = 'BUY' AND session_id IN (SELECT id FROM sessions WHERE status = 'closed'))
+        OR (type = 'BUY' AND session_id IS NULL)
+    )
+    RETURNING count(*) INTO v_deleted_txs;
+
+    -- 3. Delete CLOSED sessions
     DELETE FROM sessions
     WHERE user_id = target_user_id 
     AND status = 'closed'
     RETURNING count(*) INTO v_deleted_sessions;
-
-    -- 3. Delete transactions that are NOT linked to any remaining sessions
-    -- This includes all past SELL transactions and CLOSED BUY transactions
-    DELETE FROM transactions
-    WHERE user_id = target_user_id
-    AND id NOT IN (
-        SELECT session_id FROM transactions WHERE session_id IS NOT NULL
-        UNION
-        SELECT id FROM transactions WHERE type = 'BUY' AND id IN (SELECT id FROM sessions WHERE status = 'active')
-    )
-    -- Also ensure we don't delete BUY transactions linked to active sessions
-    AND (session_id IS NULL OR session_id NOT IN (SELECT id FROM sessions WHERE status = 'active'))
-    RETURNING count(*) INTO v_deleted_txs;
 
     RETURN jsonb_build_object(
         'success', true,
