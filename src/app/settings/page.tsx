@@ -17,27 +17,23 @@ export default function SettingsPage() {
   const [showTargetModal, setShowTargetModal] = useState(false);
   const [showThemeModal, setShowThemeModal] = useState(false);
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
-  const [showFixConfirm, setShowFixConfirm] = useState(false);
   const [loggingOut, setLoggingOut] = useState(false);
-  const [isFixing, setIsFixing] = useState(false);
-  const [fixResult, setFixResult] = useState<{show: boolean, type: 'success' | 'error', message: string}>({
-    show: false,
-    type: 'success',
-    message: ''
-  });
 
   // Closing State
   const [showClosingConfirm, setShowClosingConfirm] = useState(false);
   const [isClosing, setIsClosing] = useState(false);
   const [closingSteps, setClosingSteps] = useState<{
+    snapshot: 'pending' | 'loading' | 'success' | 'error',
     excel: 'pending' | 'loading' | 'success' | 'error',
     tele: 'pending' | 'loading' | 'success' | 'error',
     db: 'pending' | 'loading' | 'success' | 'error'
   }>({
+    snapshot: 'pending',
     excel: 'pending',
     tele: 'pending',
     db: 'pending'
   });
+  const [activeSnapshot, setActiveSnapshot] = useState<any[]>([]);
   const [closingError, setClosingError] = useState<string | null>(null);
   const [closingResult, setClosingResult] = useState<{show: boolean, type: 'success' | 'error', message: string}>({
     show: false,
@@ -60,13 +56,25 @@ export default function SettingsPage() {
   const handleMonthlyClosing = async () => {
     setIsClosing(true);
     setClosingError(null);
-    setClosingSteps({ excel: 'loading', tele: 'pending', db: 'pending' });
+    setActiveSnapshot([]);
+    setClosingSteps({ snapshot: 'loading', excel: 'pending', tele: 'pending', db: 'pending' });
     
     try {
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) throw new Error("Silakan login kembali");
 
-      // 1. Prepare Excel
+      await useSessionStore.getState().fetchAllSessions();
+
+      const previewRes = await fetch('/api/monthly-closing-preview', {
+        headers: { 'Authorization': `Bearer ${session.access_token}` }
+      });
+      const preview = await previewRes.json();
+      if (!previewRes.ok) throw new Error(preview.error || 'Gagal membaca sesi aktif');
+
+      const snapshotList = Array.isArray(preview.activeSessions) ? preview.activeSessions : [];
+      setActiveSnapshot(snapshotList);
+      setClosingSteps(prev => ({ ...prev, snapshot: 'success', excel: 'loading' }));
+
       const { transactions, sessionSales } = useSessionStore.getState();
       const XLSX = await import('xlsx');
       const wb = XLSX.utils.book_new();
@@ -91,6 +99,14 @@ export default function SettingsPage() {
       })));
       XLSX.utils.book_append_sheet(wb, profitSheet, "Profit_FIFO");
 
+      const snapshotSheet = XLSX.utils.json_to_sheet(snapshotList.map((s: any) => ({
+        Tanggal_Sesi: s.created_at ? dayjs(s.created_at).format('YYYY-MM-DD HH:mm') : '',
+        Harga: s.price_idr ?? s.avg_cost,
+        Avg_Cost: s.avg_cost,
+        Sisa_USDT: s.remaining_usdt
+      })));
+      XLSX.utils.book_append_sheet(wb, snapshotSheet, "Sisa_Sesi");
+
       const wbout = XLSX.write(wb, { bookType: 'xlsx', type: 'base64' });
       setClosingSteps(prev => ({ ...prev, excel: 'success', tele: 'loading' }));
 
@@ -103,6 +119,7 @@ export default function SettingsPage() {
         throw new Error("Tahap Telegram: Bot belum terhubung.");
       }
 
+      setClosingSteps(prev => ({ ...prev, db: 'loading' }));
       const res = await fetch('/api/monthly-closing', {
         method: 'POST',
         headers: {
@@ -120,20 +137,17 @@ export default function SettingsPage() {
       const result = await res.json();
       
       if (!res.ok) {
-        if (result.error?.includes('Telegram')) {
-          setClosingSteps(prev => ({ ...prev, tele: 'error' }));
-        } else {
-          setClosingSteps(prev => ({ ...prev, tele: 'success', db: 'error' }));
-        }
+        if (result.partialSuccess) setClosingSteps(prev => ({ ...prev, tele: 'success', db: 'error' }));
+        else setClosingSteps(prev => ({ ...prev, tele: 'error' }));
         throw new Error(result.error || "Gagal dalam proses Tutup Buku");
       }
 
-      setClosingSteps({ excel: 'success', tele: 'success', db: 'success' });
+      setClosingSteps({ snapshot: 'success', excel: 'success', tele: 'success', db: 'success' });
       
       setClosingResult({
         show: true,
         type: 'success',
-        message: `Tutup Buku Berhasil! ${result.archiveStats.deleted_transactions} data lama dibersihkan. Sesi aktif tetap aman.`
+        message: `Tutup Buku Berhasil! ${result.archiveStats.deleted_transactions} transaksi dihapus, ${result.archiveStats.deleted_sessions} sesi dihapus, ${result.archiveStats.restored_sessions} sesi aktif dipulihkan.`
       });
 
       setTimeout(() => window.location.reload(), 5000);
@@ -143,6 +157,7 @@ export default function SettingsPage() {
       setClosingError(e.message);
       // Determine which step failed if not already set
       setClosingSteps(prev => {
+        if (prev.snapshot === 'loading') return { ...prev, snapshot: 'error' };
         if (prev.excel === 'loading') return { ...prev, excel: 'error' };
         if (prev.tele === 'loading') return { ...prev, tele: 'error' };
         if (prev.db === 'loading') return { ...prev, db: 'error' };
@@ -151,125 +166,6 @@ export default function SettingsPage() {
     } finally {
       setIsClosing(false);
       setShowClosingConfirm(false);
-    }
-  };
-
-  const handleFixProfit = async () => {
-    setIsFixing(true);
-    // Close modal immediately or keep it open with loading state?
-    // Let's keep modal open with loading state handled by ConfirmModal
-    
-    try {
-      const { data: { session } } = await supabase.auth.getSession();
-      if (!session) {
-        setFixResult({
-          show: true,
-          type: 'error',
-          message: "Sesi tidak valid, silakan login ulang."
-        });
-        setIsFixing(false);
-        setShowFixConfirm(false);
-        return;
-      }
-
-      // 1. Check if RPC function is installed (Optional but helpful for diagnostics)
-      // We skip this check to be faster and just try rebuild directly
-      
-      // Set timeout for fetch
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 60000); // 60 seconds timeout
-
-      const res = await fetch('/api/rebuild-sales', {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${session.access_token}`
-        },
-        signal: controller.signal
-      });
-      
-      clearTimeout(timeoutId);
-      
-      const result = await res.json();
-      
-      if (!res.ok) {
-        throw new Error(result.error || `Server error: ${res.status}`);
-      }
-
-      if (result.success) {
-        setShowFixConfirm(false);
-        
-        let message = `Berhasil! ${result.stats.processedTxs} transaksi diproses & ${result.stats.newSalesRecords} record profit diperbarui.`;
-        if (result.stats.method === 'rpc') {
-          message += " (Mode Cepat RPC ✅)";
-        } else {
-          message += " (Mode Lambat JS ⚠️ - Mohon install fungsi SQL di dashboard untuk performa lebih baik)";
-        }
-
-        setFixResult({
-          show: true,
-          type: 'success',
-          message: message
-        });
-        
-        // Refresh data after short delay
-        setTimeout(() => {
-          window.location.reload();
-        }, 3000);
-      } else {
-        throw new Error(result.error || "Gagal memperbaiki data");
-      }
-    } catch (e: any) {
-      console.error(e);
-      setShowFixConfirm(false);
-      
-      let errorMsg = "Terjadi kesalahan sistem";
-      if (e.name === 'AbortError') {
-        errorMsg = "Waktu habis (Timeout). Data Anda mungkin terlalu banyak. Silakan coba lagi nanti atau hubungi developer.";
-      } else if (e.message) {
-        errorMsg = e.message;
-      }
-
-      setFixResult({
-        show: true,
-        type: 'error',
-        message: errorMsg
-      });
-    } finally {
-      setIsFixing(false);
-    }
-  };
-
-  const [debugInfo, setDebugInfo] = useState<any>(null);
-  const [checkingDebug, setCheckingDebug] = useState(false);
-
-  const handleCheckData = async () => {
-    setCheckingDebug(true);
-    try {
-      const { data: { session } } = await supabase.auth.getSession();
-      if (!session) return;
-
-      // Check Backend Data
-      const res = await fetch('/api/debug-data', {
-        headers: { 'Authorization': `Bearer ${session.access_token}` }
-      });
-      const backendData = await res.json();
-
-      // Check Frontend Data (RLS Check)
-      const { count: frontendSalesCount, error: rlsError } = await supabase
-        .from('session_sales')
-        .select('*', { count: 'exact', head: true });
-
-      setDebugInfo({
-        backend: backendData,
-        frontend: {
-          salesCount: frontendSalesCount,
-          rlsError: rlsError
-        }
-      });
-    } catch (e) {
-      console.error(e);
-    } finally {
-      setCheckingDebug(false);
     }
   };
 
@@ -328,19 +224,51 @@ export default function SettingsPage() {
               {isClosing || closingError ? (
                 <div className="space-y-4 mb-6 bg-gray-50 dark:bg-gray-900/50 p-4 rounded-2xl border border-gray-100 dark:border-gray-800">
                   <div className="flex items-center justify-between">
-                    <span className="text-sm font-medium">1. Menyiapkan Data Excel</span>
+                    <span className="text-sm font-medium">1. Membaca Sesi Aktif</span>
+                    {closingSteps.snapshot === 'loading' && <div className="w-4 h-4 border-2 border-purple-600 border-t-transparent rounded-full animate-spin" />}
+                    {closingSteps.snapshot === 'success' && <span className="text-emerald-500 text-sm font-bold">DONE</span>}
+                    {closingSteps.snapshot === 'error' && <span className="text-rose-500 text-sm font-bold">ERROR</span>}
+                  </div>
+
+                  {activeSnapshot.length > 0 && (
+                    <div className="bg-white dark:bg-gray-800 rounded-xl p-3 border border-gray-100 dark:border-gray-700">
+                      <div className="text-xs font-semibold text-gray-600 dark:text-gray-300 mb-2">
+                        Tersisa {activeSnapshot.length} sesi aktif:
+                      </div>
+                      <div className="space-y-1 text-xs text-gray-600 dark:text-gray-300">
+                        {activeSnapshot.slice(0, 8).map((s: any, idx: number) => (
+                          <div key={s.id || idx} className="flex items-center justify-between">
+                            <span className="truncate pr-2">
+                              {s.remaining_usdt?.toFixed ? s.remaining_usdt.toFixed(2) : s.remaining_usdt} USDT
+                            </span>
+                            <span className="shrink-0 text-gray-500 dark:text-gray-400">
+                              @ {Math.round(Number(s.avg_cost ?? s.price_idr) || 0).toLocaleString('id-ID')}
+                            </span>
+                          </div>
+                        ))}
+                        {activeSnapshot.length > 8 && (
+                          <div className="text-[11px] text-gray-500 dark:text-gray-400">
+                            +{activeSnapshot.length - 8} sesi lainnya…
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  )}
+
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm font-medium">2. Menyiapkan Data Excel</span>
                     {closingSteps.excel === 'loading' && <div className="w-4 h-4 border-2 border-purple-600 border-t-transparent rounded-full animate-spin" />}
                     {closingSteps.excel === 'success' && <span className="text-emerald-500 text-sm font-bold">DONE</span>}
                     {closingSteps.excel === 'error' && <span className="text-rose-500 text-sm font-bold">ERROR</span>}
                   </div>
                   <div className="flex items-center justify-between">
-                    <span className="text-sm font-medium">2. Mengirim ke Telegram Bot</span>
+                    <span className="text-sm font-medium">3. Mengirim ke Telegram Bot</span>
                     {closingSteps.tele === 'loading' && <div className="w-4 h-4 border-2 border-purple-600 border-t-transparent rounded-full animate-spin" />}
                     {closingSteps.tele === 'success' && <span className="text-emerald-500 text-sm font-bold">DONE</span>}
                     {closingSteps.tele === 'error' && <span className="text-rose-500 text-sm font-bold">ERROR</span>}
                   </div>
                   <div className="flex items-center justify-between">
-                    <span className="text-sm font-medium">3. Membersihkan Database</span>
+                    <span className="text-sm font-medium">4. Reset & Pulihkan Sesi</span>
                     {closingSteps.db === 'loading' && <div className="w-4 h-4 border-2 border-purple-600 border-t-transparent rounded-full animate-spin" />}
                     {closingSteps.db === 'success' && <span className="text-emerald-500 text-sm font-bold">DONE</span>}
                     {closingSteps.db === 'error' && <span className="text-rose-500 text-sm font-bold">ERROR</span>}
@@ -487,93 +415,6 @@ export default function SettingsPage() {
             </div>
           </section>
 
-          {/* Section: Data & Diagnostik */}
-          <section>
-            <h2 className="text-sm font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-3 px-1">
-              Data & Diagnostik
-            </h2>
-            <div className="bg-white dark:bg-gray-800 rounded-3xl p-2 shadow-sm border border-gray-100 dark:border-gray-700">
-               {/* Fix Profit */}
-               <button 
-                onClick={() => setShowFixConfirm(true)}
-                disabled={isFixing}
-                className="w-full text-left p-4 hover:bg-gray-50 dark:hover:bg-gray-700/50 rounded-2xl transition-colors group disabled:opacity-50"
-              >
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-4">
-                    <div className="w-10 h-10 rounded-xl bg-yellow-50 dark:bg-yellow-900/20 flex items-center justify-center text-xl">
-                      🛠️
-                    </div>
-                    <div>
-                      <div className="font-medium text-gray-900 dark:text-white">Perbaiki Data Profit</div>
-                      <div className="text-sm text-gray-500 dark:text-gray-400">
-                         Hitung ulang profit yang hilang
-                      </div>
-                    </div>
-                  </div>
-                  <div className="text-gray-400 group-hover:text-purple-500 transition-colors">→</div>
-                </div>
-              </button>
-
-               {/* Debug Data */}
-               <div className="h-px bg-gray-100 dark:bg-gray-700 mx-4 my-1" />
-               <button 
-                onClick={handleCheckData}
-                disabled={checkingDebug}
-                className="w-full text-left p-4 hover:bg-gray-50 dark:hover:bg-gray-700/50 rounded-2xl transition-colors group"
-              >
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-4">
-                    <div className="w-10 h-10 rounded-xl bg-blue-50 dark:bg-blue-900/20 flex items-center justify-center text-xl">
-                      🔍
-                    </div>
-                    <div>
-                      <div className="font-medium text-gray-900 dark:text-white">Cek Konsistensi Data</div>
-                      <div className="text-sm text-gray-500 dark:text-gray-400">
-                         {checkingDebug ? 'Memeriksa...' : 'Debug data sales & profit'}
-                      </div>
-                    </div>
-                  </div>
-                  <div className="text-gray-400 group-hover:text-purple-500 transition-colors">→</div>
-                </div>
-              </button>
-
-              {debugInfo && (
-                <div className="m-4 p-4 bg-gray-50 dark:bg-gray-900 rounded-xl text-xs font-mono overflow-auto max-h-60 border border-gray-200 dark:border-gray-700">
-                  <div className="mb-2 font-bold text-gray-700 dark:text-gray-300">Hasil Diagnosa:</div>
-                  <div className="grid grid-cols-2 gap-2 mb-2">
-                    <div>
-                      <span className="text-gray-500">Backend Sales:</span>
-                      <span className="ml-2 font-bold">{debugInfo.backend?.counts?.session_sales ?? '?'}</span>
-                    </div>
-                    <div>
-                      <span className="text-gray-500">Frontend Sales:</span>
-                      <span className="ml-2 font-bold text-blue-600">{debugInfo.frontend?.salesCount ?? '?'}</span>
-                    </div>
-                    <div>
-                      <span className="text-gray-500">Total Profit (DB):</span>
-                      <span className="ml-2 font-bold text-green-600">{formatIDR(debugInfo.backend?.financials?.total_profit_backend ?? 0)}</span>
-                    </div>
-                  </div>
-                  {debugInfo.frontend?.rlsError && (
-                    <div className="text-red-500 mb-2">
-                      RLS Error: {debugInfo.frontend.rlsError.message}
-                    </div>
-                  )}
-                  {debugInfo.backend?.counts?.session_sales !== debugInfo.frontend?.salesCount && (
-                    <div className="text-orange-500 mt-2 p-2 bg-orange-50 dark:bg-orange-900/20 rounded">
-                      ⚠️ Data tidak sinkron! Kemungkinan karena limit query.
-                      <br/>
-                      Backend ({debugInfo.backend?.counts?.session_sales}) vs Frontend ({debugInfo.frontend?.salesCount})
-                      <br/>
-                      Sistem profit sudah menggunakan perhitungan server-side (RPC), jadi total profit di Dashboard tetap AKURAT meskipun angka ini beda.
-                    </div>
-                  )}
-                </div>
-              )}
-            </div>
-          </section>
-
           {/* Section: Lainnya */}
           <section>
             <h2 className="text-sm font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-3 px-1">
@@ -691,27 +532,6 @@ export default function SettingsPage() {
           </div>
         )}
 
-        {/* Fix Confirmation Modal */}
-        <ConfirmModal
-          isOpen={showFixConfirm}
-          onClose={() => !isFixing && setShowFixConfirm(false)}
-          onConfirm={handleFixProfit}
-          title="Perbaiki Data Profit?"
-          message="Sistem akan menghitung ulang semua profit berdasarkan riwayat transaksi Anda. Proses ini aman dan dapat memperbaiki data yang hilang atau tidak sinkron."
-          confirmText="Mulai Perbaikan"
-          isLoading={isFixing}
-          type="warning"
-        />
-
-        {/* Result Notification */}
-        <PopupNotification
-          show={fixResult.show}
-          type={fixResult.type}
-          title={fixResult.type === 'success' ? 'Perbaikan Berhasil' : 'Gagal Memperbaiki'}
-          message={fixResult.message}
-          onClose={() => setFixResult(prev => ({ ...prev, show: false }))}
-        />
-
         <PopupNotification
           show={closingResult.show}
           type={closingResult.type}
@@ -726,7 +546,7 @@ export default function SettingsPage() {
           onClose={() => !isClosing && setShowClosingConfirm(false)}
           onConfirm={handleMonthlyClosing}
           title="Tutup Buku Bulanan"
-          message="Sistem akan mengirimkan rekap transaksi bulan ini ke Bot Telegram Anda (Excel), lalu menghapus riwayat transaksi lama yang sudah tertutup. Sesi yang masih aktif (ada sisa USDT) tetap dipertahankan. Lanjutkan?"
+          message="Sistem akan membaca sesi aktif yang masih tersisa, mengirim Excel rekap ke Telegram, lalu menghapus semua data transaksi dan sesi. Setelah itu, sesi aktif akan dipulihkan otomatis dari snapshot agar modal tetap aman. Lanjutkan?"
           confirmText="Ya, Tutup Buku"
           isLoading={isClosing}
           type="warning"

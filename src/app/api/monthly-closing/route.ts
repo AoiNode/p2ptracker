@@ -52,15 +52,14 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: `Gagal mengirim ke Telegram: ${teleResult.description}` }, { status: 500 });
     }
 
-    // 3. ARCHIVE DATA (Run RPC)
-    console.log(`Cleaning up closed data for user ${user.id}...`);
+    // 3. RESET DATA & RESTORE ACTIVE INVENTORY
+    console.log(`Resetting data for user ${user.id}...`);
     
     if (skipCleaning) {
       return NextResponse.json({ success: true, message: 'File dikirim, pembersihan dilewati.' });
     }
 
-    // Call the new V2 RPC with SECURITY DEFINER
-    const { data: archiveData, error: archiveError } = await supabase.rpc('archive_closed_data_v2', {
+    const { data: archiveData, error: archiveError } = await supabase.rpc('monthly_close_reset_v1', {
       target_user_id: user.id
     });
 
