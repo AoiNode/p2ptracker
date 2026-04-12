@@ -19,7 +19,8 @@ export async function POST(req: NextRequest) {
     const { data: { user }, error: authError } = await supabase.auth.getUser(authHeader.replace('Bearer ', ''));
     if (authError || !user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
-    const { excelData, fileName, chatId } = await req.json();
+    const body = await req.json();
+    const { excelData, fileName, chatId, skipCleaning } = body;
 
     if (!excelData || !chatId) {
       console.error('Missing required data:', { hasExcel: !!excelData, chatId });
@@ -53,13 +54,23 @@ export async function POST(req: NextRequest) {
 
     // 3. ARCHIVE DATA (Run RPC)
     console.log(`Cleaning up closed data for user ${user.id}...`);
+    
+    if (skipCleaning) {
+      return NextResponse.json({ success: true, message: 'File dikirim, pembersihan dilewati.' });
+    }
+
     const { data: archiveData, error: archiveError } = await supabase.rpc('archive_closed_data', {
       target_user_id: user.id
     });
 
     if (archiveError) {
       console.error('Archive RPC error:', archiveError);
-      return NextResponse.json({ error: `Gagal membersihkan database: ${archiveError.message}` }, { status: 500 });
+      // Special case: if file sent but cleaning failed
+      return NextResponse.json({ 
+        success: false, 
+        error: `File terkirim, tapi gagal membersihkan database: ${archiveError.message}. Anda bisa mencoba 'Hanya Bersihkan Data' di menu Settings.`,
+        partialSuccess: true 
+      }, { status: 500 });
     }
 
     console.log('Monthly closing completed successfully:', archiveData);

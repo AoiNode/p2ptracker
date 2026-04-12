@@ -29,6 +29,7 @@ export default function SettingsPage() {
   // Closing State
   const [showClosingConfirm, setShowClosingConfirm] = useState(false);
   const [isClosing, setIsClosing] = useState(false);
+  const [closingStep, setClosingStep] = useState<'idle' | 'exporting' | 'sending' | 'cleaning'>('idle');
   const [closingResult, setClosingResult] = useState<{show: boolean, type: 'success' | 'error', message: string}>({
     show: false,
     type: 'success',
@@ -47,20 +48,20 @@ export default function SettingsPage() {
     }
   };
 
-  const handleMonthlyClosing = async () => {
+  const handleMonthlyClosing = async (skipCleaning = false) => {
     setIsClosing(true);
+    setClosingStep('exporting');
     try {
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) throw new Error("Silakan login kembali");
 
       // 1. Get current month data from store
-      const { transactions, sessions, sessionSales } = useSessionStore.getState();
+      const { transactions, sessionSales } = useSessionStore.getState();
       
-      // 2. Prepare Excel using 'xlsx'
+      // 2. Prepare Excel
       const XLSX = await import('xlsx');
       const wb = XLSX.utils.book_new();
       
-      // Prepare Sheets
       const txSheet = XLSX.utils.json_to_sheet(transactions.map(t => ({
         Tanggal: dayjs(t.tx_time).format('YYYY-MM-DD HH:mm'),
         Tipe: t.type,
@@ -81,19 +82,21 @@ export default function SettingsPage() {
       })));
       XLSX.utils.book_append_sheet(wb, profitSheet, "Profit_FIFO");
 
-      // Convert to Base64
       const wbout = XLSX.write(wb, { bookType: 'xlsx', type: 'base64' });
 
       // 3. Get Chat ID
+      setClosingStep('sending');
       const linkResponse = await fetch('/api/telegram/link', {
         headers: { 'Authorization': `Bearer ${session.access_token}` }
       });
       const linkData = await linkResponse.json();
       if (!linkData.linked || !linkData.account?.telegram_user_id) {
-        throw new Error("Bot Telegram belum terhubung. Hubungkan bot dulu di menu Akun & Target.");
+        throw new Error("Bot Telegram belum terhubung.");
       }
 
       // 4. Send to API
+      if (!skipCleaning) setClosingStep('cleaning');
+      
       const res = await fetch('/api/monthly-closing', {
         method: 'POST',
         headers: {
@@ -103,20 +106,35 @@ export default function SettingsPage() {
         body: JSON.stringify({
           excelData: wbout,
           fileName: `Rekap_P2P_${dayjs().format('MMM_YYYY')}.xlsx`,
-          chatId: linkData.account.telegram_user_id
+          chatId: linkData.account.telegram_user_id,
+          skipCleaning: skipCleaning
         })
       });
 
       const result = await res.json();
-      if (!res.ok) throw new Error(result.error);
+      if (!res.ok) {
+        if (result.partialSuccess) {
+          setClosingResult({
+            show: true,
+            type: 'error',
+            message: result.error
+          });
+          return;
+        }
+        throw new Error(result.error);
+      }
 
       setClosingResult({
         show: true,
         type: 'success',
-        message: `Tutup Buku Berhasil! Rekap dikirim ke Telegram. ${result.archiveStats.deleted_transactions} riwayat lama dibersihkan. Sesi aktif tetap dipertahankan.`
+        message: skipCleaning 
+          ? "Rekap Excel berhasil dikirim ke Telegram!" 
+          : `Tutup Buku Berhasil! Rekap dikirim ke Telegram. ${result.archiveStats.deleted_transactions} data lama dibersihkan.`
       });
 
-      setTimeout(() => window.location.reload(), 5000);
+      if (!skipCleaning) {
+        setTimeout(() => window.location.reload(), 5000);
+      }
 
     } catch (e: any) {
       console.error(e);
@@ -127,7 +145,41 @@ export default function SettingsPage() {
       });
     } finally {
       setIsClosing(false);
+      setClosingStep('idle');
       setShowClosingConfirm(false);
+    }
+  };
+
+  const handleOnlyCleaning = async () => {
+    setIsClosing(true);
+    setClosingStep('cleaning');
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) throw new Error("Silakan login kembali");
+
+      const { data: archiveData, error: archiveError } = await supabase.rpc('archive_closed_data', {
+        target_user_id: session.user.id
+      });
+
+      if (archiveError) throw archiveError;
+
+      setClosingResult({
+        show: true,
+        type: 'success',
+        message: `Database berhasil dibersihkan! ${archiveData.deleted_transactions} data lama dihapus.`
+      });
+
+      setTimeout(() => window.location.reload(), 3000);
+    } catch (e: any) {
+      console.error(e);
+      setClosingResult({
+        show: true,
+        type: 'error',
+        message: e.message || "Gagal membersihkan database"
+      });
+    } finally {
+      setIsClosing(false);
+      setClosingStep('idle');
     }
   };
 
@@ -292,46 +344,77 @@ export default function SettingsPage() {
             </h2>
             <div className="bg-white dark:bg-gray-800 rounded-3xl p-2 shadow-sm border border-gray-100 dark:border-gray-700">
               {/* Monthly Closing */}
-              <button 
-                onClick={() => setShowClosingConfirm(true)}
-                disabled={isClosing}
-                className="w-full text-left p-4 hover:bg-purple-50 dark:hover:bg-purple-900/20 rounded-2xl transition-colors group disabled:opacity-50"
-              >
-                <div className="flex items-center justify-between">
+              <div className="p-4 hover:bg-purple-50 dark:hover:bg-purple-900/20 rounded-2xl transition-colors group">
+                <div className="flex items-center justify-between mb-3">
                   <div className="flex items-center gap-4">
-                    <div className="w-10 h-10 rounded-xl bg-purple-50 dark:bg-purple-900/20 flex items-center justify-center text-xl text-purple-600">
-                      📊
+                    <div className="w-10 h-10 rounded-xl bg-purple-50 dark:bg-purple-900/20 flex items-center justify-center text-xl text-purple-600 font-bold">
+                      {isClosing ? (
+                        <div className="w-5 h-5 border-2 border-purple-600 border-t-transparent rounded-full animate-spin" />
+                      ) : "📊"}
                     </div>
                     <div>
                       <div className="font-medium text-gray-900 dark:text-white">Tutup Buku Bulanan</div>
-                      <div className="text-sm text-gray-500 dark:text-gray-400">Kirim rekap Excel ke Telegram & reset riwayat</div>
+                      <div className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
+                        {closingStep === 'exporting' ? '📊 Menyiapkan Excel...' : 
+                         closingStep === 'sending' ? '📤 Mengirim ke Telegram...' :
+                         closingStep === 'cleaning' ? '🧹 Membersihkan Database...' :
+                         'Kirim rekap Excel & reset riwayat'}
+                      </div>
                     </div>
                   </div>
-                  <div className="text-gray-400 group-hover:text-purple-500 transition-colors">→</div>
                 </div>
-              </button>
+                <div className="flex gap-2">
+                  <button 
+                    onClick={() => setShowClosingConfirm(true)}
+                    disabled={isClosing}
+                    className="flex-1 py-2 bg-purple-600 hover:bg-purple-700 text-white text-xs font-bold rounded-xl transition-all shadow-md shadow-purple-600/20 disabled:opacity-50"
+                  >
+                    Tutup Buku
+                  </button>
+                  <button 
+                    onClick={() => handleMonthlyClosing(true)}
+                    disabled={isClosing}
+                    className="px-3 py-2 border border-purple-200 dark:border-purple-800 text-purple-600 dark:text-purple-400 text-[10px] font-bold rounded-xl hover:bg-purple-50 transition-all disabled:opacity-50"
+                  >
+                    Hanya Kirim Excel
+                  </button>
+                </div>
+              </div>
 
               <div className="h-px bg-gray-100 dark:bg-gray-700 mx-4 my-1" />
 
               {/* Fix Profit */}
-              <button 
-                onClick={() => setShowFixConfirm(true)}
-                disabled={isFixing}
-                className="w-full text-left p-4 hover:bg-yellow-50 dark:hover:bg-yellow-900/20 rounded-2xl transition-colors group disabled:opacity-50"
-              >
-                <div className="flex items-center justify-between">
+              <div className="p-4 hover:bg-yellow-50 dark:hover:bg-yellow-900/20 rounded-2xl transition-colors group">
+                <div className="flex items-center justify-between mb-3">
                   <div className="flex items-center gap-4">
                     <div className="w-10 h-10 rounded-xl bg-yellow-50 dark:bg-yellow-900/20 flex items-center justify-center text-xl">
-                      🛠️
+                      {isFixing ? (
+                        <div className="w-5 h-5 border-2 border-yellow-600 border-t-transparent rounded-full animate-spin" />
+                      ) : "🛠️"}
                     </div>
                     <div>
                       <div className="font-medium text-gray-900 dark:text-white">Sinkronisasi Sesi</div>
-                      <div className="text-sm text-gray-500 dark:text-gray-400">Perbaiki sisa saldo USDT yang tidak akurat</div>
+                      <div className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">Perbaiki sisa saldo USDT yang tidak akurat</div>
                     </div>
                   </div>
-                  <div className="text-gray-400 group-hover:text-yellow-600 transition-colors">→</div>
                 </div>
-              </button>
+                <div className="flex gap-2">
+                  <button 
+                    onClick={() => setShowFixConfirm(true)}
+                    disabled={isFixing || isClosing}
+                    className="flex-1 py-2 bg-yellow-500 hover:bg-yellow-600 text-white text-xs font-bold rounded-xl transition-all shadow-md shadow-yellow-500/20 disabled:opacity-50"
+                  >
+                    Sinkronkan Sekarang
+                  </button>
+                  <button 
+                    onClick={handleOnlyCleaning}
+                    disabled={isFixing || isClosing}
+                    className="px-3 py-2 border border-yellow-200 dark:border-yellow-800 text-yellow-600 dark:text-yellow-400 text-[10px] font-bold rounded-xl hover:bg-yellow-50 transition-all disabled:opacity-50"
+                  >
+                    Hanya Bersihkan Data
+                  </button>
+                </div>
+              </div>
             </div>
           </section>
 

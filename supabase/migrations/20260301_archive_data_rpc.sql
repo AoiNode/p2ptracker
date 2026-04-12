@@ -8,24 +8,27 @@ DECLARE
     v_deleted_sessions INTEGER := 0;
 BEGIN
     -- 1. Delete session_sales for CLOSED sessions
-    DELETE FROM session_sales
-    WHERE session_id IN (
-        SELECT id FROM sessions 
-        WHERE user_id = target_user_id 
-        AND status = 'closed'
+    -- Using EXISTS for better performance on large datasets
+    DELETE FROM session_sales ss
+    WHERE EXISTS (
+        SELECT 1 FROM sessions s 
+        WHERE s.id = ss.session_id 
+        AND s.user_id = target_user_id 
+        AND s.status = 'closed'
     )
     RETURNING count(*) INTO v_deleted_sales;
 
     -- 2. Delete Transactions
-    -- We delete ALL SELL transactions (they are archived in Excel)
-    -- We delete BUY transactions linked to CLOSED sessions
-    -- We delete BUY transactions that have no session (orphans)
-    DELETE FROM transactions
-    WHERE user_id = target_user_id
+    -- We delete ALL SELL transactions (archived in Excel)
+    -- and BUY transactions linked to CLOSED sessions
+    DELETE FROM transactions t
+    WHERE t.user_id = target_user_id
     AND (
-        type = 'SELL'
-        OR (type = 'BUY' AND session_id IN (SELECT id FROM sessions WHERE status = 'closed'))
-        OR (type = 'BUY' AND session_id IS NULL)
+        t.type = 'SELL'
+        OR (t.type = 'BUY' AND (
+            t.session_id IS NULL 
+            OR EXISTS (SELECT 1 FROM sessions s WHERE s.id = t.session_id AND s.status = 'closed')
+        ))
     )
     RETURNING count(*) INTO v_deleted_txs;
 
