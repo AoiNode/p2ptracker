@@ -189,6 +189,32 @@ export default function SettingsPage() {
         </div>
         
         <div className="space-y-8">
+          {/* Section: Troubleshoot Data */}
+          <section>
+            <h2 className="text-sm font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-3 px-1">
+              Bantuan & Perbaikan Data
+            </h2>
+            <div className="bg-orange-50 dark:bg-orange-900/10 border border-orange-100 dark:border-orange-900/30 rounded-3xl p-5">
+              <div className="flex items-start gap-4 mb-4">
+                <div className="p-3 bg-orange-100 dark:bg-orange-900/30 rounded-2xl text-2xl">
+                  🛠️
+                </div>
+                <div>
+                  <h3 className="font-bold text-orange-800 dark:text-orange-400">Sesi Aktif Tidak Muncul?</h3>
+                  <p className="text-sm text-orange-700 dark:text-orange-500 mt-1">
+                    Jika Anda merasa ada sesi yang harusnya aktif tapi tidak muncul, atau data profit tidak sinkron, gunakan fitur perbaikan di bawah.
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={() => setShowFixConfirm(true)}
+                className="w-full py-3 bg-orange-500 hover:bg-orange-600 text-white font-bold rounded-2xl transition-all shadow-lg shadow-orange-500/25 flex items-center justify-center gap-2"
+              >
+                <span>Perbaiki Sinkronisasi Data Sesi</span>
+              </button>
+            </div>
+          </section>
+
           {/* Section: Tampilan */}
           <section>
             <h2 className="text-sm font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-3 px-1">

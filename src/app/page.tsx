@@ -56,6 +56,10 @@ export default function HomePage(){
   const dashboardMonthlyPL = stats.monthlyProfit;
   const dashboardTodayPL = stats.todayProfit;
 
+  const displayTotalBuy = stats.totalBuyVolume !== 0 ? stats.totalBuyVolume : s.totalBuy;
+  const displayTotalRemainingUSDT = stats.totalRemainingUSDT !== 0 ? stats.totalRemainingUSDT : s.capitalUSDT;
+  const displayROI = stats.roi !== 0 ? stats.roi : s.roi;
+
   // Use recent activities from RPC if available, otherwise fallback to store transactions
   const displayTransactions = recentActivities.length > 0 ? recentActivities : transactions;
   
@@ -73,10 +77,10 @@ export default function HomePage(){
             title="Profit Bulan Ini"
             monthlyPL={dashboardMonthlyPL}
             todayPL={dashboardTodayPL}
-            capitalIDR={s.totalBuy}
-            capitalUSDT={s.capitalUSDT}
-            roi={s.roi}
-            saldoAkhir={s.saldoAkhir}
+            capitalIDR={displayTotalBuy}
+            capitalUSDT={displayTotalRemainingUSDT}
+            roi={displayROI}
+            saldoAkhir={displayTotalBuy + stats.totalProfit}
             targetBulanan={s.targetMonthly}
             progress={currentProgress}
           />
