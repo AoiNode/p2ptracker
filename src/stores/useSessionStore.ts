@@ -153,39 +153,27 @@ export const useSessionStore = create<State & Actions>((set, get) => ({
     };
     
     try {
-      // ALWAYS create a NEW unique session for each BUY transaction
-      // This ensures 1-to-1 mapping and avoids confusion when viewing history
-      const session = {
-        created_at: tx_time,
-        user_id: user.id,
-        price_idr: price_idr,
-        total_invest_idr: total_idr,
-        total_usdt: amount_usdt,
-        avg_cost: price_idr,
-        remaining_usdt: amount_usdt,
-        realized_profit_idr: 0,
-        status: 'active'
-      };
-      
-      const { data: sessionData, error: sessionError } = await supabase
-        .from('sessions')
-        .insert([session])
-        .select()
-        .single();
-        
-      if (sessionError) throw sessionError;
-      const sessionId = sessionData.id;
-      
-      // Insert transaction with the newly created session_id
-      const { data: txData, error: txError } = await supabase
-        .from('transactions')
-        .insert([{ ...newTx, session_id: sessionId }])
-        .select()
-        .single();
-        
-      if (txError) throw txError;
-      
-      // Refresh all data
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) throw new Error('User not authenticated');
+
+      const res = await fetch('/api/transactions/buy', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${session.access_token}`
+        },
+        body: JSON.stringify({
+          price_idr,
+          total_idr,
+          amount_usdt,
+          tx_time,
+          label: label || 'Binance'
+        })
+      });
+
+      const body = await res.json();
+      if (!res.ok) throw new Error(body.error || 'Gagal menyimpan BUY');
+
       await get().fetchAllSessions();
     } catch (error) {
       console.error('Error adding buy session:', error);
@@ -264,7 +252,6 @@ export const useSessionStore = create<State & Actions>((set, get) => ({
   },
 
   addSmartSell: async (sold_usdt: number, price_idr: number, dt = new Date(), fee = 0, feeType: 'percent' | 'value' = 'percent', label?: ExchangeLabel) => {
-    const s = get();
     const tx_time = dt.toISOString();
     
     // Get current user
@@ -274,168 +261,28 @@ export const useSessionStore = create<State & Actions>((set, get) => ({
     // Calculate fee
     const total_proceeds = sold_usdt * price_idr;
     const fee_idr = feeType === 'percent' ? (total_proceeds * fee / 100) : fee;
-    
-    // Fee is always subtracted from proceeds for SELL (all exchanges)
-    const net_proceeds = total_proceeds - fee_idr;
 
-    // Prefer atomic server-side RPC to prevent partial writes that can zero-out profit views.
     try {
-      const { data: rpcData, error: rpcError } = await supabase.rpc('process_sell_transaction', {
-        p_user_id: user.id,
-        p_price: price_idr,
-        p_sold_usdt: sold_usdt,
-        p_tx_time: tx_time,
-        p_label: label || 'Binance',
-        p_fee_idr: fee_idr
-      });
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) throw new Error('User not authenticated');
 
-      if (!rpcError && rpcData?.success) {
-        const txId = rpcData.tx_id as string | undefined;
-        await get().fetchAllSessions();
-
-        if (txId) {
-          const hasSales = get().sessionSales.some(sale => sale.tx_id === txId);
-          if (!hasSales) {
-            try {
-              const { data: { session } } = await supabase.auth.getSession();
-              if (session) {
-                const res = await fetch('/api/rebuild-sales', {
-                  method: 'POST',
-                  headers: { 'Authorization': `Bearer ${session.access_token}` }
-                });
-                const body = await res.json();
-                if (!res.ok) {
-                  console.error('rebuild-sales failed:', body);
-                } else {
-                  await get().fetchAllSessions();
-                }
-              }
-            } catch (e) {
-              console.error('Failed to rebuild profit:', e);
-            }
-          }
-        }
-
-        await get().fetchDashboardStats();
-        return;
-      }
-
-      // If RPC exists but returns business error, surface it clearly.
-      if (!rpcError && rpcData && rpcData.success === false) {
-        throw new Error(rpcData.error || 'SELL RPC gagal memproses transaksi');
-      }
-    } catch (rpcFallbackError: any) {
-      // Fallback to legacy client-side flow below for environments where RPC is not installed yet.
-      console.warn('Falling back to client-side smart sell flow:', rpcFallbackError?.message || rpcFallbackError);
-    }
-    
-    try {
-      // Process FIFO sell across multiple sessions (sort by date first to ensure proper FIFO)
-    const sortedSessions = [...s.sessions].sort((a, b) => 
-      new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
-    );
-    const result = processSmartFIFOSell(
-      sortedSessions,
-      sold_usdt,
-      price_idr,
-      tx_time,
-      fee_idr
-    );
-
-      // Create single SELL transaction
-      const { data: txInsert, error: txErr } = await supabase
-        .from("transactions")
-        .insert({
-          user_id: user.id,
-          tx_time,
-          type: 'SELL',
+      const res = await fetch('/api/transactions/sell', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${session.access_token}`
+        },
+        body: JSON.stringify({
           price_idr,
-          amount_usdt: sold_usdt,
-          total_idr: net_proceeds,
+          sold_usdt,
+          tx_time,
           fee_idr,
           label: label || 'Binance'
         })
-        .select("id")
-        .single();
-      
-      if (txErr) throw txErr;
-      const sell_tx_id = txInsert.id as string;
-
-      // Update all affected sessions in database
-      for (const { session, sale } of result.affectedSessions) {
-        // Update session
-        const { error: sessionErr } = await supabase
-          .from("sessions")
-          .update({
-            remaining_usdt: session.remaining_usdt,
-            realized_profit_idr: session.realized_profit_idr,
-            status: session.status
-          })
-          .eq("id", session.id!);
-        
-        if (sessionErr) throw sessionErr;
-
-        // Insert session_sale with tx_id
-        const { error: saleErr } = await supabase
-          .from("session_sales")
-          .insert({
-            session_id: sale.session_id,
-            tx_id: sell_tx_id,
-            sold_usdt: sale.sold_usdt,
-            proceeds_idr: sale.proceeds_idr,
-            cost_idr: sale.cost_idr,
-            profit_idr: sale.profit_idr
-          });
-        
-        if (saleErr) throw saleErr;
-      }
-
-      // Update local state
-      const updatedSessions = s.sessions.map(sess => {
-        const affected = result.affectedSessions.find(a => a.session.id === sess.id);
-        return affected ? affected.session : sess;
       });
 
-      const newSales = result.affectedSessions.map(a => ({
-        ...a.sale,
-        tx_id: sell_tx_id
-      }));
-
-      set({
-        transactions: [
-          {
-            id: sell_tx_id,
-            tx_time,
-            type: 'SELL' as const,
-            price_idr,
-            amount_usdt: sold_usdt,
-            total_idr: net_proceeds,
-            fee_idr
-          },
-          ...s.transactions
-        ],
-        sessions: updatedSessions,
-        sessionSales: [...newSales, ...s.sessionSales]
-      });
-
-      try {
-        const hasSalesForThisTx = newSales.length > 0;
-        if (!hasSalesForThisTx) {
-          const { data: { session } } = await supabase.auth.getSession();
-          if (session) {
-            const res = await fetch('/api/rebuild-sales', {
-              method: 'POST',
-              headers: { 'Authorization': `Bearer ${session.access_token}` }
-            });
-            const body = await res.json();
-            if (!res.ok) {
-              console.error('rebuild-sales failed:', body);
-            }
-          }
-        }
-      } catch (e) {
-        console.error('Failed to rebuild profit via API:', e);
-      }
+      const body = await res.json();
+      if (!res.ok) throw new Error(body.error || 'Gagal menyimpan SELL');
 
       await get().fetchAllSessions();
       await get().fetchDashboardStats();
