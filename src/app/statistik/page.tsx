@@ -473,70 +473,6 @@ export default function StatistikPage(){
           </div>
         </div>
 
-        <div className="bg-white dark:bg-gray-800 rounded-3xl p-5 shadow-soft mb-8">
-            <div className="flex flex-col gap-3 mb-4 sm:flex-row sm:items-center sm:justify-between">
-              <div>
-                <h2 className="text-lg font-semibold text-gray-800 dark:text-white">Ringkasan Bulanan Tersimpan</h2>
-                <p className="text-xs text-gray-500 dark:text-gray-400">
-                  Profit bulan kalender yang tetap tersimpan setelah Tutup Buku
-                </p>
-              </div>
-              <div className="flex gap-2">
-                <select
-                  value={selectedYear}
-                  onChange={(e) => setSelectedYear(Number(e.target.value))}
-                  className="p-2 rounded-lg bg-gray-100 dark:bg-gray-700 text-gray-800 dark:text-white border-none focus:ring-2 focus:ring-purple-500 outline-none cursor-pointer text-sm"
-                >
-                  {availableYears.map(year => (
-                    <option key={year} value={year}>{year}</option>
-                  ))}
-                </select>
-                <select
-                  value={selectedSummaryMonth}
-                  onChange={(e) => setSelectedSummaryMonth(e.target.value)}
-                  className="p-2 rounded-lg bg-gray-100 dark:bg-gray-700 text-gray-800 dark:text-white border-none focus:ring-2 focus:ring-purple-500 outline-none cursor-pointer text-sm"
-                >
-                  <option value="all">Semua Bulan</option>
-                  {monthNames.map((m, idx) => (
-                    <option key={m} value={idx}>{m}</option>
-                  ))}
-                </select>
-              </div>
-            </div>
-
-            {monthlyHistoryForYear.length > 0 ? (
-              <div className="space-y-3">
-                {monthlyHistoryForYear.map((item) => (
-                  <div
-                    key={item.month_key}
-                    className="flex items-center justify-between gap-3 rounded-2xl border border-gray-100 dark:border-gray-700 bg-gray-50 dark:bg-gray-900/40 px-4 py-3"
-                  >
-                    <div>
-                      <div className="font-semibold text-gray-900 dark:text-white">
-                        {dayjs(item.month_start).format('MMMM YYYY')}
-                      </div>
-                      <div className="text-xs text-gray-500 dark:text-gray-400">
-                        {dayjs(item.month_start).format('DD MMM')} - {dayjs(item.month_end).format('DD MMM YYYY')}
-                      </div>
-                    </div>
-                    <div className="text-right">
-                      <div className={`font-bold ${Number(item.total_profit_idr) >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400'}`}>
-                        {formatIDR(Number(item.total_profit_idr || 0))}
-                      </div>
-                      <div className="text-[11px] text-gray-500 dark:text-gray-400">
-                        {item.is_finalized ? 'Final' : 'Berjalan'}
-                      </div>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            ) : (
-              <div className="bg-gray-50 dark:bg-gray-900/50 rounded-2xl p-6 text-center text-sm text-gray-600 dark:text-gray-300">
-                Tidak ada ringkasan bulanan untuk filter yang dipilih.
-              </div>
-            )}
-          </div>
-
         {/* Download Modal Popup */}
         {showModal && (
           <>
@@ -729,6 +665,70 @@ export default function StatistikPage(){
             </div>
           </div>
         )}
+
+        <div className="bg-white dark:bg-gray-800 rounded-3xl p-5 shadow-soft mb-8">
+          <div className="flex flex-col gap-3 mb-4 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <h2 className="text-lg font-semibold text-gray-800 dark:text-white">Ringkasan Bulanan Tersimpan</h2>
+              <p className="text-xs text-gray-500 dark:text-gray-400">
+                Profit bulan kalender yang tetap tersimpan setelah Tutup Buku
+              </p>
+            </div>
+            <div className="flex gap-2">
+              <select
+                value={selectedYear}
+                onChange={(e) => setSelectedYear(Number(e.target.value))}
+                className="p-2 rounded-lg bg-gray-100 dark:bg-gray-700 text-gray-800 dark:text-white border-none focus:ring-2 focus:ring-purple-500 outline-none cursor-pointer text-sm"
+              >
+                {availableYears.map(year => (
+                  <option key={year} value={year}>{year}</option>
+                ))}
+              </select>
+              <select
+                value={selectedSummaryMonth}
+                onChange={(e) => setSelectedSummaryMonth(e.target.value)}
+                className="p-2 rounded-lg bg-gray-100 dark:bg-gray-700 text-gray-800 dark:text-white border-none focus:ring-2 focus:ring-purple-500 outline-none cursor-pointer text-sm"
+              >
+                <option value="all">Semua Bulan</option>
+                {monthNames.map((m, idx) => (
+                  <option key={m} value={idx}>{m}</option>
+                ))}
+              </select>
+            </div>
+          </div>
+
+          {monthlyHistoryForYear.length > 0 ? (
+            <div className="space-y-3">
+              {monthlyHistoryForYear.map((item) => (
+                <div
+                  key={item.month_key}
+                  className="flex items-center justify-between gap-3 rounded-2xl border border-gray-100 dark:border-gray-700 bg-gray-50 dark:bg-gray-900/40 px-4 py-3"
+                >
+                  <div>
+                    <div className="font-semibold text-gray-900 dark:text-white">
+                      {dayjs(item.month_start).format('MMMM YYYY')}
+                    </div>
+                    <div className="text-xs text-gray-500 dark:text-gray-400">
+                      {dayjs(item.month_start).format('DD MMM')} - {dayjs(item.month_end).format('DD MMM YYYY')}
+                    </div>
+                  </div>
+                  <div className="text-right">
+                    <div className={`font-bold ${Number(item.total_profit_idr) >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400'}`}>
+                      {formatIDR(Number(item.total_profit_idr || 0))}
+                    </div>
+                    <div className="text-[11px] text-gray-500 dark:text-gray-400">
+                      {item.is_finalized ? 'Final' : 'Berjalan'}
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div className="bg-gray-50 dark:bg-gray-900/50 rounded-2xl p-6 text-center text-sm text-gray-600 dark:text-gray-300">
+              Tidak ada ringkasan bulanan untuk filter yang dipilih.
+            </div>
+          )}
+        </div>
       </main>
     </PageWrapper>
   );
