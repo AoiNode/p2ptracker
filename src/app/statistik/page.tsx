@@ -19,30 +19,23 @@ export default function StatistikPage(){
   const [downloading, setDownloading] = useState(false);
   const [showModal, setShowModal] = useState(false);
   
-  // Year selection state
+  // Monthly summary filter state
   const [selectedYear, setSelectedYear] = useState(new Date().getFullYear());
+  const [selectedSummaryMonth, setSelectedSummaryMonth] = useState<string>("all");
 
   // State for daily stats
   const [dailyStats, setDailyStats] = useState<any[]>([]);
   const [monthlyHistory, setMonthlyHistory] = useState<any[]>([]);
-  const [dailyView, setDailyView] = useState<'month' | 'alltime'>('month');
-  const [selectedMonth, setSelectedMonth] = useState<number>(new Date().getMonth());
   const [dailyExpanded, setDailyExpanded] = useState(true);
   const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun', 'Jul', 'Agu', 'Sep', 'Okt', 'Nov', 'Des'];
+  const activeMonth = new Date().getMonth();
+  const activeYear = new Date().getFullYear();
 
   useEffect(() => {
-    fetchAllSessions();
-  }, [fetchAllSessions]);
-
-  useEffect(() => {
-    if (selectedYear === new Date().getFullYear()) {
-      setSelectedMonth(new Date().getMonth());
-    } else {
-      setSelectedMonth(0);
-    }
+    setSelectedSummaryMonth("all");
   }, [selectedYear]);
 
-  // Fetch daily stats from RPC when year changes
+  // Fetch daily stats for active calendar year only
   useEffect(() => {
     const fetchDailyStats = async () => {
       try {
@@ -51,7 +44,7 @@ export default function StatistikPage(){
 
         const { data, error } = await supabase.rpc('get_daily_stats', { 
           target_user_id: user.id,
-          target_year: selectedYear
+          target_year: activeYear
         });
 
         if (!error && data) {
@@ -67,7 +60,7 @@ export default function StatistikPage(){
     };
 
     fetchDailyStats();
-  }, [selectedYear]);
+  }, [activeYear]);
 
   useEffect(() => {
     const fetchMonthlyHistory = async () => {
@@ -116,6 +109,7 @@ export default function StatistikPage(){
 
   const monthlyHistoryForYear = monthlyHistory
     .filter(m => new Date(m.month_key).getFullYear() === selectedYear)
+    .filter(m => selectedSummaryMonth === "all" || new Date(m.month_key).getMonth() === Number(selectedSummaryMonth))
     .sort((a, b) => new Date(a.month_key).getTime() - new Date(b.month_key).getTime());
 
   // Group transactions by date for chart (Fallback Logic)
@@ -124,7 +118,7 @@ export default function StatistikPage(){
   // Only process fallback if dailyStats is empty (RPC failed or empty)
   if (dailyStats.length === 0) {
     // Process BUY transactions
-    txs.filter(t => t.type === 'BUY' && new Date(t.tx_time).getFullYear() === selectedYear).forEach(tx => {
+    txs.filter(t => t.type === 'BUY' && new Date(t.tx_time).getFullYear() === activeYear).forEach(tx => {
       const dateKey = dayjs(tx.tx_time).format('DD/MM');
       const existing = dailyMap.get(dateKey) || {buy: 0, sell: 0, profit: 0};
       existing.buy += tx.total_idr;
@@ -135,7 +129,7 @@ export default function StatistikPage(){
       const saleDateSource = rawSale.created_at || rawSale.transactions?.tx_time;
       if (!saleDateSource) return;
       const saleDate = new Date(saleDateSource);
-      if (saleDate.getFullYear() !== selectedYear) return;
+      if (saleDate.getFullYear() !== activeYear) return;
       const dateKey = dayjs(saleDateSource).format('DD/MM');
       const existing = dailyMap.get(dateKey) || { buy: 0, sell: 0, profit: 0 };
       existing.sell += rawSale.proceeds_idr;
@@ -153,7 +147,7 @@ export default function StatistikPage(){
     txs
       .filter(tx => 
         tx.type === 'SELL' && 
-        new Date(tx.tx_time).getFullYear() === selectedYear &&
+        new Date(tx.tx_time).getFullYear() === activeYear &&
         tx.id && 
         !sellTxIdsWithSales.has(tx.id)
       )
@@ -189,41 +183,22 @@ export default function StatistikPage(){
       });
   }
 
-  const chartDataDisplay = dailyView === 'month'
-    ? chartData.filter((d: any) => {
-      const parts = String(d.date).split('/');
-      if (parts.length !== 2) return false;
-      const month = Number(parts[1]);
-      if (!Number.isFinite(month)) return false;
-      return month - 1 === selectedMonth;
-    })
-    : chartData;
+  const chartDataDisplay = chartData.filter((d: any) => {
+    const parts = String(d.date).split('/');
+    if (parts.length !== 2) return false;
+    const month = Number(parts[1]);
+    if (!Number.isFinite(month)) return false;
+    return month - 1 === activeMonth;
+  });
 
   // Calculate totals for selected year (chart only)
-  const chartTotalBuy = chartData.reduce((sum: number, d: any) => sum + d.buy, 0);
-  const chartTotalSell = chartData.reduce((sum: number, d: any) => sum + d.sell, 0);
-  const chartTotalProfit = chartData.reduce((sum: number, d: any) => sum + d.profit, 0);
+  const chartTotalBuy = chartDataDisplay.reduce((sum: number, d: any) => sum + d.buy, 0);
+  const chartTotalSell = chartDataDisplay.reduce((sum: number, d: any) => sum + d.sell, 0);
+  const chartTotalProfit = chartDataDisplay.reduce((sum: number, d: any) => sum + d.profit, 0);
 
-  const isCurrentYear = selectedYear === new Date().getFullYear();
-
-  // Determine what to display in cards
-  // Now supports month filter for card summaries too
-  const filteredDisplayData = dailyView === 'month' 
-    ? chartData.filter((d: any) => {
-        const parts = String(d.date).split('/');
-        return parts.length === 2 && Number(parts[1]) - 1 === selectedMonth;
-      })
-    : chartData;
-
-  const displayTotalProfitFiltered = filteredDisplayData.reduce((sum: number, d: any) => sum + d.profit, 0);
-  const displayTotalBuyFiltered = filteredDisplayData.reduce((sum: number, d: any) => sum + d.buy, 0);
-  const displayTotalSellFiltered = filteredDisplayData.reduce((sum: number, d: any) => sum + d.sell, 0);
-
-  // If viewing all time year, but filtered by month, use filtered totals.
-  // Otherwise use the existing card logic.
-  const cardProfit = (dailyView === 'month') ? displayTotalProfitFiltered : (isCurrentYear ? displayTotalProfit : chartTotalProfit);
-  const cardBuy = (dailyView === 'month') ? displayTotalBuyFiltered : (isCurrentYear ? displayTotalBuy : chartTotalBuy);
-  const cardSell = (dailyView === 'month') ? displayTotalSellFiltered : (isCurrentYear ? displayTotalSell : chartTotalSell);
+  const cardProfit = chartTotalProfit;
+  const cardBuy = chartTotalBuy;
+  const cardSell = chartTotalSell;
 
   const handleDownloadCSV = (period: 'daily' | 'weekly' | 'monthly' | 'alltime') => {
     setShowModal(false);
@@ -444,17 +419,6 @@ export default function StatistikPage(){
           </div>
           
           <div className="flex gap-2">
-            {/* Year Selector */}
-            <select
-              value={selectedYear}
-              onChange={(e) => setSelectedYear(Number(e.target.value))}
-              className="p-2 rounded-lg bg-gray-100 dark:bg-gray-800 text-gray-800 dark:text-white border-none focus:ring-2 focus:ring-purple-500 outline-none cursor-pointer"
-            >
-              {availableYears.map(year => (
-                <option key={year} value={year}>{year}</option>
-              ))}
-            </select>
-
             {/* Download Button - Icon Only */}
             <button
               onClick={() => setShowModal(true)}
@@ -478,7 +442,7 @@ export default function StatistikPage(){
             </div>
             <div className="text-3xl font-bold tracking-tight">{formatIDR(cardProfit)}</div>
             <div className="mt-2 text-[10px] text-white/60 uppercase tracking-widest font-semibold">
-              {dailyView === 'month' ? `Periode ${monthNames[selectedMonth]}` : 'Seluruh Waktu'}
+              {`Periode ${monthNames[activeMonth]} ${activeYear}`}
             </div>
           </div>
           
@@ -509,44 +473,69 @@ export default function StatistikPage(){
           </div>
         </div>
 
-        {monthlyHistoryForYear.length > 0 && (
-          <div className="bg-white dark:bg-gray-800 rounded-3xl p-5 shadow-soft mb-8">
-            <div className="flex items-center justify-between mb-4">
+        <div className="bg-white dark:bg-gray-800 rounded-3xl p-5 shadow-soft mb-8">
+            <div className="flex flex-col gap-3 mb-4 sm:flex-row sm:items-center sm:justify-between">
               <div>
                 <h2 className="text-lg font-semibold text-gray-800 dark:text-white">Ringkasan Bulanan Tersimpan</h2>
                 <p className="text-xs text-gray-500 dark:text-gray-400">
                   Profit bulan kalender yang tetap tersimpan setelah Tutup Buku
                 </p>
               </div>
+              <div className="flex gap-2">
+                <select
+                  value={selectedYear}
+                  onChange={(e) => setSelectedYear(Number(e.target.value))}
+                  className="p-2 rounded-lg bg-gray-100 dark:bg-gray-700 text-gray-800 dark:text-white border-none focus:ring-2 focus:ring-purple-500 outline-none cursor-pointer text-sm"
+                >
+                  {availableYears.map(year => (
+                    <option key={year} value={year}>{year}</option>
+                  ))}
+                </select>
+                <select
+                  value={selectedSummaryMonth}
+                  onChange={(e) => setSelectedSummaryMonth(e.target.value)}
+                  className="p-2 rounded-lg bg-gray-100 dark:bg-gray-700 text-gray-800 dark:text-white border-none focus:ring-2 focus:ring-purple-500 outline-none cursor-pointer text-sm"
+                >
+                  <option value="all">Semua Bulan</option>
+                  {monthNames.map((m, idx) => (
+                    <option key={m} value={idx}>{m}</option>
+                  ))}
+                </select>
+              </div>
             </div>
 
-            <div className="space-y-3">
-              {monthlyHistoryForYear.map((item) => (
-                <div
-                  key={item.month_key}
-                  className="flex items-center justify-between gap-3 rounded-2xl border border-gray-100 dark:border-gray-700 bg-gray-50 dark:bg-gray-900/40 px-4 py-3"
-                >
-                  <div>
-                    <div className="font-semibold text-gray-900 dark:text-white">
-                      {dayjs(item.month_start).format('MMMM YYYY')}
+            {monthlyHistoryForYear.length > 0 ? (
+              <div className="space-y-3">
+                {monthlyHistoryForYear.map((item) => (
+                  <div
+                    key={item.month_key}
+                    className="flex items-center justify-between gap-3 rounded-2xl border border-gray-100 dark:border-gray-700 bg-gray-50 dark:bg-gray-900/40 px-4 py-3"
+                  >
+                    <div>
+                      <div className="font-semibold text-gray-900 dark:text-white">
+                        {dayjs(item.month_start).format('MMMM YYYY')}
+                      </div>
+                      <div className="text-xs text-gray-500 dark:text-gray-400">
+                        {dayjs(item.month_start).format('DD MMM')} - {dayjs(item.month_end).format('DD MMM YYYY')}
+                      </div>
                     </div>
-                    <div className="text-xs text-gray-500 dark:text-gray-400">
-                      {dayjs(item.month_start).format('DD MMM')} - {dayjs(item.month_end).format('DD MMM YYYY')}
+                    <div className="text-right">
+                      <div className={`font-bold ${Number(item.total_profit_idr) >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400'}`}>
+                        {formatIDR(Number(item.total_profit_idr || 0))}
+                      </div>
+                      <div className="text-[11px] text-gray-500 dark:text-gray-400">
+                        {item.is_finalized ? 'Final' : 'Berjalan'}
+                      </div>
                     </div>
                   </div>
-                  <div className="text-right">
-                    <div className={`font-bold ${Number(item.total_profit_idr) >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400'}`}>
-                      {formatIDR(Number(item.total_profit_idr || 0))}
-                    </div>
-                    <div className="text-[11px] text-gray-500 dark:text-gray-400">
-                      {item.is_finalized ? 'Final' : 'Berjalan'}
-                    </div>
-                  </div>
-                </div>
-              ))}
-            </div>
+                ))}
+              </div>
+            ) : (
+              <div className="bg-gray-50 dark:bg-gray-900/50 rounded-2xl p-6 text-center text-sm text-gray-600 dark:text-gray-300">
+                Tidak ada ringkasan bulanan untuk filter yang dipilih.
+              </div>
+            )}
           </div>
-        )}
 
         {/* Download Modal Popup */}
         {showModal && (
@@ -651,42 +640,8 @@ export default function StatistikPage(){
                   {dailyExpanded ? 'Sembunyikan' : 'Tampilkan'}
                 </button>
               </div>
-
-              <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-end">
-                <div className="w-full sm:w-auto flex items-center rounded-xl overflow-hidden border border-gray-200 dark:border-gray-700">
-                  <button
-                    onClick={() => setDailyView('month')}
-                    className={`flex-1 sm:flex-none px-3 py-2 text-xs font-semibold transition-colors ${
-                      dailyView === 'month'
-                        ? 'bg-purple-600 text-white'
-                        : 'bg-white dark:bg-gray-800 text-gray-600 dark:text-gray-300'
-                    }`}
-                  >
-                    Per Bulan
-                  </button>
-                  <button
-                    onClick={() => setDailyView('alltime')}
-                    className={`flex-1 sm:flex-none px-3 py-2 text-xs font-semibold transition-colors ${
-                      dailyView === 'alltime'
-                        ? 'bg-purple-600 text-white'
-                        : 'bg-white dark:bg-gray-800 text-gray-600 dark:text-gray-300'
-                    }`}
-                  >
-                    All Time
-                  </button>
-                </div>
-
-                {dailyView === 'month' && (
-                  <select
-                    value={selectedMonth}
-                    onChange={(e) => setSelectedMonth(Number(e.target.value))}
-                    className="w-full sm:w-auto text-xs px-3 py-2 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-200"
-                  >
-                    {monthNames.map((m, idx) => (
-                      <option key={m} value={idx}>{m}</option>
-                    ))}
-                  </select>
-                )}
+              <div className="text-xs text-gray-500 dark:text-gray-400 px-3 py-2 rounded-xl bg-gray-50 dark:bg-gray-900/40">
+                Bulan aktif: {monthNames[activeMonth]} {activeYear}
               </div>
             </div>
 
@@ -762,9 +717,7 @@ export default function StatistikPage(){
               )
             ) : (
               <div className="text-xs text-gray-500 dark:text-gray-400">
-                {dailyView === 'month'
-                  ? `Menampilkan harian bulan ${monthNames[selectedMonth]} ${selectedYear}`
-                  : `Menampilkan harian sepanjang ${selectedYear}`}
+                {`Menampilkan harian bulan aktif ${monthNames[activeMonth]} ${activeYear}`}
               </div>
             )}
           </div>
