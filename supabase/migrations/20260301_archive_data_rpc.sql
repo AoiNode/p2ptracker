@@ -56,6 +56,7 @@ AS $$
 DECLARE
     v_snapshot JSONB;
     v_active_count INTEGER := 0;
+    v_finalized_months INTEGER := 0;
     v_deleted_sales INTEGER := 0;
     v_deleted_txs INTEGER := 0;
     v_deleted_sessions INTEGER := 0;
@@ -66,6 +67,9 @@ DECLARE
     v_avg_cost NUMERIC;
     v_remaining_usdt NUMERIC;
 BEGIN
+    PERFORM refresh_all_open_monthly_profit_summaries(target_user_id);
+    v_finalized_months := finalize_monthly_profit_summaries(target_user_id);
+
     SELECT COALESCE(
         jsonb_agg(
             jsonb_build_object(
@@ -145,7 +149,8 @@ BEGIN
         'deleted_sales', v_deleted_sales,
         'deleted_transactions', v_deleted_txs,
         'deleted_sessions', v_deleted_sessions,
-        'restored_sessions', v_restored_sessions
+        'restored_sessions', v_restored_sessions,
+        'finalized_months', v_finalized_months
     );
 END;
 $$ LANGUAGE plpgsql;

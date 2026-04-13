@@ -24,6 +24,7 @@ export default function StatistikPage(){
 
   // State for daily stats
   const [dailyStats, setDailyStats] = useState<any[]>([]);
+  const [monthlyHistory, setMonthlyHistory] = useState<any[]>([]);
   const [dailyView, setDailyView] = useState<'month' | 'alltime'>('month');
   const [selectedMonth, setSelectedMonth] = useState<number>(new Date().getMonth());
   const [dailyExpanded, setDailyExpanded] = useState(true);
@@ -68,6 +69,32 @@ export default function StatistikPage(){
     fetchDailyStats();
   }, [selectedYear]);
 
+  useEffect(() => {
+    const fetchMonthlyHistory = async () => {
+      try {
+        const { data: { user } } = await supabase.auth.getUser();
+        if (!user) return;
+
+        const { data, error } = await supabase.rpc('get_monthly_profit_history', {
+          target_user_id: user.id,
+          target_year: null
+        });
+
+        if (!error && data) {
+          setMonthlyHistory(data);
+        } else {
+          console.warn("Failed to fetch monthly history", error);
+          setMonthlyHistory([]);
+        }
+      } catch (e) {
+        console.error("Error fetching monthly history:", e);
+        setMonthlyHistory([]);
+      }
+    };
+
+    fetchMonthlyHistory();
+  }, []);
+
   // Use stats from RPC if available, otherwise fallback to client calculation
   // Client calculation (fallback):
   const clientTotalBuy = txs.filter(t => t.type === 'BUY').reduce((acc, t) => acc + t.total_idr, 0);
@@ -83,8 +110,13 @@ export default function StatistikPage(){
   const availableYears = Array.from(new Set([
     ...txs.map(t => new Date(t.tx_time).getFullYear()),
     ...sessionSales.filter(s => s.created_at).map(s => new Date(s.created_at!).getFullYear()),
+    ...monthlyHistory.map(m => new Date(m.month_key).getFullYear()),
     new Date().getFullYear() // Always include current year
   ])).sort((a, b) => b - a);
+
+  const monthlyHistoryForYear = monthlyHistory
+    .filter(m => new Date(m.month_key).getFullYear() === selectedYear)
+    .sort((a, b) => new Date(a.month_key).getTime() - new Date(b.month_key).getTime());
 
   // Group transactions by date for chart (Fallback Logic)
   const dailyMap = new Map<string, {buy: number, sell: number, profit: number}>();
@@ -476,6 +508,45 @@ export default function StatistikPage(){
             </div>
           </div>
         </div>
+
+        {monthlyHistoryForYear.length > 0 && (
+          <div className="bg-white dark:bg-gray-800 rounded-3xl p-5 shadow-soft mb-8">
+            <div className="flex items-center justify-between mb-4">
+              <div>
+                <h2 className="text-lg font-semibold text-gray-800 dark:text-white">Ringkasan Bulanan Tersimpan</h2>
+                <p className="text-xs text-gray-500 dark:text-gray-400">
+                  Profit bulan kalender yang tetap tersimpan setelah Tutup Buku
+                </p>
+              </div>
+            </div>
+
+            <div className="space-y-3">
+              {monthlyHistoryForYear.map((item) => (
+                <div
+                  key={item.month_key}
+                  className="flex items-center justify-between gap-3 rounded-2xl border border-gray-100 dark:border-gray-700 bg-gray-50 dark:bg-gray-900/40 px-4 py-3"
+                >
+                  <div>
+                    <div className="font-semibold text-gray-900 dark:text-white">
+                      {dayjs(item.month_start).format('MMMM YYYY')}
+                    </div>
+                    <div className="text-xs text-gray-500 dark:text-gray-400">
+                      {dayjs(item.month_start).format('DD MMM')} - {dayjs(item.month_end).format('DD MMM YYYY')}
+                    </div>
+                  </div>
+                  <div className="text-right">
+                    <div className={`font-bold ${Number(item.total_profit_idr) >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400'}`}>
+                      {formatIDR(Number(item.total_profit_idr || 0))}
+                    </div>
+                    <div className="text-[11px] text-gray-500 dark:text-gray-400">
+                      {item.is_finalized ? 'Final' : 'Berjalan'}
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
 
         {/* Download Modal Popup */}
         {showModal && (
