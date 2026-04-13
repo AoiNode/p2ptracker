@@ -52,92 +52,53 @@ export const useSessionStore = create<State & Actions>((set, get) => ({
   },
   
   fetchStats: async () => {
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) return;
-    
-    // Call RPC function for stats
-    const { data, error } = await supabase.rpc('get_user_stats', { target_user_id: user.id });
-    
-    if (!error && data) {
-      set(state => ({
-        stats: {
-          ...state.stats, // Keep existing stats
-          totalProfit: data.total_profit || 0,
-          totalSalesVolume: data.total_sales_volume || 0,
-          salesCount: data.sales_count || 0,
-          totalBuyVolume: data.total_buy_volume || 0,
-          activeCapital: data.active_capital || 0
-        }
-      }));
-    } else {
-      console.warn("Failed to fetch server-side stats", error);
+    const { sessions, transactions, sessionSales } = get();
+    const totalProfit = sessionSales.reduce((sum, sale) => sum + sale.profit_idr, 0);
+    const totalSalesVolume = transactions
+      .filter(t => t.type === 'SELL')
+      .reduce((sum, t) => sum + t.total_idr, 0);
+    const totalBuyVolume = transactions
+      .filter(t => t.type === 'BUY')
+      .reduce((sum, t) => sum + t.total_idr, 0);
+    const activeCapital = sessions.reduce((sum, s) => sum + (s.remaining_usdt * s.avg_cost), 0);
 
-      const { sessions, transactions, sessionSales } = get();
-      const totalProfit = sessionSales.reduce((sum, sale) => sum + sale.profit_idr, 0);
-      const totalSalesVolume = transactions
-        .filter(t => t.type === 'SELL')
-        .reduce((sum, t) => sum + t.total_idr, 0);
-      const totalBuyVolume = transactions
-        .filter(t => t.type === 'BUY')
-        .reduce((sum, t) => sum + t.total_idr, 0);
-      const activeCapital = sessions.reduce((sum, s) => sum + (s.remaining_usdt * s.avg_cost), 0);
-
-      set(state => ({
-        stats: {
-          ...state.stats,
-          totalProfit,
-          totalSalesVolume,
-          salesCount: sessionSales.length,
-          totalBuyVolume,
-          activeCapital
-        }
-      }));
-    }
+    set(state => ({
+      stats: {
+        ...state.stats,
+        totalProfit,
+        totalSalesVolume,
+        salesCount: sessionSales.length,
+        totalBuyVolume,
+        activeCapital
+      }
+    }));
   },
 
   fetchDashboardStats: async () => {
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) return;
-    
-    // Call RPC function for dashboard stats
-    const { data, error } = await supabase.rpc('get_monthly_stats', { target_user_id: user.id });
-    
-    if (!error && data) {
-      set(state => ({
-        stats: {
-          ...state.stats, // Keep existing stats
-          monthlyProfit: data.monthly_profit || 0,
-          todayProfit: data.today_profit || 0
-        }
-      }));
-    } else {
-      console.warn("Failed to fetch dashboard stats", error);
+    const { sessions, sessionSales, targetMonthly } = get();
+    const dashboardData = calculateDashboardStats(sessions, sessionSales, targetMonthly);
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const tomorrow = new Date(today);
+    tomorrow.setDate(tomorrow.getDate() + 1);
 
-      const { sessions, sessionSales, targetMonthly } = get();
-      const dashboardData = calculateDashboardStats(sessions, sessionSales, targetMonthly);
-      const today = new Date();
-      today.setHours(0, 0, 0, 0);
-      const tomorrow = new Date(today);
-      tomorrow.setDate(tomorrow.getDate() + 1);
+    const todayProfit = sessionSales
+      .filter(sale => {
+        const anySale = sale as any;
+        const dateSource = anySale.created_at || anySale.transactions?.tx_time;
+        if (!dateSource) return false;
+        const saleDate = new Date(dateSource);
+        return saleDate >= today && saleDate < tomorrow;
+      })
+      .reduce((sum, sale) => sum + sale.profit_idr, 0);
 
-      const todayProfit = sessionSales
-        .filter(sale => {
-          const anySale = sale as any;
-          const dateSource = anySale.created_at || anySale.transactions?.tx_time;
-          if (!dateSource) return false;
-          const saleDate = new Date(dateSource);
-          return saleDate >= today && saleDate < tomorrow;
-        })
-        .reduce((sum, sale) => sum + sale.profit_idr, 0);
-
-      set(state => ({
-        stats: {
-          ...state.stats,
-          monthlyProfit: dashboardData.monthlyProfit,
-          todayProfit
-        }
-      }));
-    }
+    set(state => ({
+      stats: {
+        ...state.stats,
+        monthlyProfit: dashboardData.monthlyProfit,
+        todayProfit
+      }
+    }));
   },
   
   setTargetMonthly: async (target: number) => {

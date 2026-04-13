@@ -20,11 +20,8 @@ import { supabase } from "@/lib/supabaseClient";
 export default function HomePage(){
   const { user } = useAuth();
   const fetchAllSessions = useSessionStore(s => s.fetchAllSessions);
-  const fetchStats = useSessionStore(s => s.fetchStats);
-  const fetchDashboardStats = useSessionStore(s => s.fetchDashboardStats); // New
   const sessions = useSessionStore(s => s.sessions);
   const transactions = useSessionStore(s => s.transactions);
-  const stats = useSessionStore(s => s.stats); // Use server-side stats
   const s = computeSessionDashboard();
   
   // State for recent activities with profit
@@ -33,8 +30,6 @@ export default function HomePage(){
   useEffect(() => {
     if (user) {
       fetchAllSessions();
-      fetchStats(); // Ensure stats are fetched
-      fetchDashboardStats(); // Ensure dashboard stats are fetched
       
       // Fetch recent activities with profit
       const fetchActivities = async () => {
@@ -48,18 +43,16 @@ export default function HomePage(){
       };
       fetchActivities();
     }
-  }, [user, fetchAllSessions, fetchStats, fetchDashboardStats]);
+  }, [user, fetchAllSessions]);
 
   const activeSessionsCount = sessions.filter(sess => sess.status === 'active' || sess.remaining_usdt > 0.00000001).length;
   
-  // Use server-side stats for Dashboard if available
-  const dashboardMonthlyPL = stats.monthlyProfit !== 0 ? stats.monthlyProfit : s.monthlyPL;
-  const dashboardTodayPL = stats.todayProfit !== 0 ? stats.todayProfit : s.todayPL;
-  const displayTotalProfit = stats.totalProfit !== 0 ? stats.totalProfit : s.saldoAkhir - s.totalBuy;
-
-  const displayTotalBuy = stats.totalBuyVolume !== 0 ? stats.totalBuyVolume : s.totalBuy;
+  const dashboardMonthlyPL = s.monthlyPL;
+  const dashboardTodayPL = s.todayPL;
+  const displayTotalProfit = s.saldoAkhir - s.totalBuy;
+  const displayTotalBuy = s.totalBuy;
   const displayTotalRemainingUSDT = s.capitalUSDT; // stats from server doesn't have totalRemainingUSDT yet
-  const displayROI = displayTotalBuy > 0 ? (displayTotalProfit / displayTotalBuy * 100) : s.roi;
+  const displayROI = s.roi;
 
   // Use recent activities from RPC if available, otherwise fallback to store transactions
   const displayTransactions = recentActivities.length > 0 ? recentActivities : transactions;

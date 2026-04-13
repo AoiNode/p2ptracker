@@ -13,7 +13,6 @@ export default function StatistikPage(){
   const txs = useSessionStore(s=>s.transactions);
   const sessions = useSessionStore(s=>s.sessions);
   const sessionSales = useSessionStore(s=>s.sessionSales);
-  const stats = useSessionStore(s=>s.stats); // Use stats from store
   const fetchAllSessions = useSessionStore(s=>s.fetchAllSessions);
   const { currentTheme, isDark } = useTheme();
   const [downloading, setDownloading] = useState(false);
@@ -88,16 +87,12 @@ export default function StatistikPage(){
     fetchMonthlyHistory();
   }, []);
 
-  // Use stats from RPC if available, otherwise fallback to client calculation
-  // Client calculation (fallback):
   const clientTotalBuy = txs.filter(t => t.type === 'BUY').reduce((acc, t) => acc + t.total_idr, 0);
   const clientTotalSell = txs.filter(t => t.type === 'SELL').reduce((acc, t) => acc + t.total_idr, 0);
   const clientTotalProfit = sessionSales.reduce((acc, s) => acc + s.profit_idr, 0);
-  
-  // Use stats if non-zero (meaning RPC worked), otherwise client
-  const displayTotalProfit = stats.totalProfit !== 0 ? stats.totalProfit : clientTotalProfit;
-  const displayTotalBuy = stats.totalBuyVolume !== 0 ? stats.totalBuyVolume : clientTotalBuy;
-  const displayTotalSell = stats.totalSalesVolume !== 0 ? stats.totalSalesVolume : clientTotalSell;
+  const displayTotalProfit = clientTotalProfit;
+  const displayTotalBuy = clientTotalBuy;
+  const displayTotalSell = clientTotalSell;
 
   // Get available years from data
   const availableYears = Array.from(new Set([
