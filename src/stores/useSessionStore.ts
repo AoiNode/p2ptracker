@@ -277,6 +277,32 @@ export const useSessionStore = create<State & Actions>((set, get) => ({
     
     // Fee is always subtracted from proceeds for SELL (all exchanges)
     const net_proceeds = total_proceeds - fee_idr;
+
+    // Prefer atomic server-side RPC to prevent partial writes that can zero-out profit views.
+    try {
+      const { data: rpcData, error: rpcError } = await supabase.rpc('process_sell_transaction', {
+        p_user_id: user.id,
+        p_price: price_idr,
+        p_sold_usdt: sold_usdt,
+        p_tx_time: tx_time,
+        p_label: label || 'Binance',
+        p_fee_idr: fee_idr
+      });
+
+      if (!rpcError && rpcData?.success) {
+        await get().fetchAllSessions();
+        await get().fetchDashboardStats();
+        return;
+      }
+
+      // If RPC exists but returns business error, surface it clearly.
+      if (!rpcError && rpcData && rpcData.success === false) {
+        throw new Error(rpcData.error || 'SELL RPC gagal memproses transaksi');
+      }
+    } catch (rpcFallbackError: any) {
+      // Fallback to legacy client-side flow below for environments where RPC is not installed yet.
+      console.warn('Falling back to client-side smart sell flow:', rpcFallbackError?.message || rpcFallbackError);
+    }
     
     try {
       // Process FIFO sell across multiple sessions (sort by date first to ensure proper FIFO)
@@ -412,23 +438,20 @@ export const useSessionStore = create<State & Actions>((set, get) => ({
       .order("tx_time", { ascending: false })
       .limit(50000); // Increased from 5000 to 50000 for full export support
     
-    // Fetch session_sales for the sessions we just fetched
-    const sessionIds = sessions?.map((s: Session) => s.id).filter(Boolean) || [];
+    // Fetch session_sales by transaction ids (more robust than relation-name joins across environments)
+    const txIds = (txs || []).map((t: Transaction) => t.id).filter(Boolean) as string[];
     let sales: SessionSale[] = [];
     
-    if (sessionIds.length > 0) {
-      // Fetch sales related to these sessions
-      const { data: salesData } = await supabase.from("session_sales")
-        .select(`
-          *,
-          transactions!session_sales_tx_id_fkey (
-            id, price_idr, amount_usdt, total_idr, tx_time, type
-          )
-        `)
-        .in('session_id', sessionIds)
+    if (txIds.length > 0) {
+      const { data: salesData, error: salesError } = await supabase.from("session_sales")
+        .select("*")
+        .in('tx_id', txIds)
         .order("created_at", { ascending: false })
         .limit(50000); // Increased from 10000 to 50000
       
+      if (salesError) {
+        console.error('Failed to fetch session_sales:', salesError);
+      }
       sales = salesData || [];
     }
 
