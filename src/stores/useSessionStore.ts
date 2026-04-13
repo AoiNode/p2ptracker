@@ -297,11 +297,18 @@ export const useSessionStore = create<State & Actions>((set, get) => ({
           const hasSales = get().sessionSales.some(sale => sale.tx_id === txId);
           if (!hasSales) {
             try {
-              const { error: rebuildError } = await supabase.rpc('rebuild_user_profit', { target_user_id: user.id });
-              if (rebuildError) {
-                console.error('rebuild_user_profit error:', rebuildError);
-              } else {
-                await get().fetchAllSessions();
+              const { data: { session } } = await supabase.auth.getSession();
+              if (session) {
+                const res = await fetch('/api/rebuild-sales', {
+                  method: 'POST',
+                  headers: { 'Authorization': `Bearer ${session.access_token}` }
+                });
+                const body = await res.json();
+                if (!res.ok) {
+                  console.error('rebuild-sales failed:', body);
+                } else {
+                  await get().fetchAllSessions();
+                }
               }
             } catch (e) {
               console.error('Failed to rebuild profit:', e);
@@ -410,6 +417,25 @@ export const useSessionStore = create<State & Actions>((set, get) => ({
         sessions: updatedSessions,
         sessionSales: [...newSales, ...s.sessionSales]
       });
+
+      try {
+        const hasSalesForThisTx = newSales.length > 0;
+        if (!hasSalesForThisTx) {
+          const { data: { session } } = await supabase.auth.getSession();
+          if (session) {
+            const res = await fetch('/api/rebuild-sales', {
+              method: 'POST',
+              headers: { 'Authorization': `Bearer ${session.access_token}` }
+            });
+            const body = await res.json();
+            if (!res.ok) {
+              console.error('rebuild-sales failed:', body);
+            }
+          }
+        }
+      } catch (e) {
+        console.error('Failed to rebuild profit via API:', e);
+      }
 
       await get().fetchAllSessions();
       await get().fetchDashboardStats();
