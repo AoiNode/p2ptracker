@@ -53,12 +53,13 @@ export default function HomePage(){
   const activeSessionsCount = sessions.filter(sess => sess.status === 'active' || sess.remaining_usdt > 0.00000001).length;
   
   // Use server-side stats for Dashboard if available
-  const dashboardMonthlyPL = stats.monthlyProfit;
-  const dashboardTodayPL = stats.todayProfit;
+  const dashboardMonthlyPL = stats.monthlyProfit !== 0 ? stats.monthlyProfit : s.monthlyPL;
+  const dashboardTodayPL = stats.todayProfit !== 0 ? stats.todayProfit : s.todayPL;
+  const displayTotalProfit = stats.totalProfit !== 0 ? stats.totalProfit : s.saldoAkhir - s.totalBuy;
 
   const displayTotalBuy = stats.totalBuyVolume !== 0 ? stats.totalBuyVolume : s.totalBuy;
   const displayTotalRemainingUSDT = s.capitalUSDT; // stats from server doesn't have totalRemainingUSDT yet
-  const displayROI = stats.totalBuyVolume > 0 ? (stats.totalProfit / stats.totalBuyVolume * 100) : s.roi;
+  const displayROI = displayTotalBuy > 0 ? (displayTotalProfit / displayTotalBuy * 100) : s.roi;
 
   // Use recent activities from RPC if available, otherwise fallback to store transactions
   const displayTransactions = recentActivities.length > 0 ? recentActivities : transactions;
@@ -80,7 +81,7 @@ export default function HomePage(){
             capitalIDR={displayTotalBuy}
             capitalUSDT={displayTotalRemainingUSDT}
             roi={displayROI}
-            saldoAkhir={displayTotalBuy + stats.totalProfit}
+            saldoAkhir={displayTotalBuy + displayTotalProfit}
             targetBulanan={s.targetMonthly}
             progress={currentProgress}
           />
