@@ -52,53 +52,46 @@ export const useSessionStore = create<State & Actions>((set, get) => ({
   },
   
   fetchStats: async () => {
-    const { sessions, transactions, sessionSales } = get();
-    const totalProfit = sessionSales.reduce((sum, sale) => sum + sale.profit_idr, 0);
-    const totalSalesVolume = transactions
-      .filter(t => t.type === 'SELL')
-      .reduce((sum, t) => sum + t.total_idr, 0);
-    const totalBuyVolume = transactions
-      .filter(t => t.type === 'BUY')
-      .reduce((sum, t) => sum + t.total_idr, 0);
-    const activeCapital = sessions.reduce((sum, s) => sum + (s.remaining_usdt * s.avg_cost), 0);
-
-    set(state => ({
-      stats: {
-        ...state.stats,
-        totalProfit,
-        totalSalesVolume,
-        salesCount: sessionSales.length,
-        totalBuyVolume,
-        activeCapital
-      }
-    }));
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return;
+    
+    // Call RPC function for stats
+    const { data, error } = await supabase.rpc('get_user_stats', { target_user_id: user.id });
+    
+    if (!error && data) {
+      set(state => ({
+        stats: {
+          ...state.stats, // Keep existing stats
+          totalProfit: data.total_profit || 0,
+          totalSalesVolume: data.total_sales_volume || 0,
+          salesCount: data.sales_count || 0,
+          totalBuyVolume: data.total_buy_volume || 0,
+          activeCapital: data.active_capital || 0
+        }
+      }));
+    } else {
+      console.warn("Failed to fetch server-side stats", error);
+    }
   },
 
   fetchDashboardStats: async () => {
-    const { sessions, sessionSales, targetMonthly } = get();
-    const dashboardData = calculateDashboardStats(sessions, sessionSales, targetMonthly);
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    const tomorrow = new Date(today);
-    tomorrow.setDate(tomorrow.getDate() + 1);
-
-    const todayProfit = sessionSales
-      .filter(sale => {
-        const anySale = sale as any;
-        const dateSource = anySale.created_at || anySale.transactions?.tx_time;
-        if (!dateSource) return false;
-        const saleDate = new Date(dateSource);
-        return saleDate >= today && saleDate < tomorrow;
-      })
-      .reduce((sum, sale) => sum + sale.profit_idr, 0);
-
-    set(state => ({
-      stats: {
-        ...state.stats,
-        monthlyProfit: dashboardData.monthlyProfit,
-        todayProfit
-      }
-    }));
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return;
+    
+    // Call RPC function for dashboard stats
+    const { data, error } = await supabase.rpc('get_monthly_stats', { target_user_id: user.id });
+    
+    if (!error && data) {
+      set(state => ({
+        stats: {
+          ...state.stats, // Keep existing stats
+          monthlyProfit: data.monthly_profit || 0,
+          todayProfit: data.today_profit || 0
+        }
+      }));
+    } else {
+      console.warn("Failed to fetch dashboard stats", error);
+    }
   },
   
   setTargetMonthly: async (target: number) => {
@@ -261,7 +254,8 @@ export const useSessionStore = create<State & Actions>((set, get) => ({
     // Calculate fee
     const total_proceeds = sold_usdt * price_idr;
     const fee_idr = feeType === 'percent' ? (total_proceeds * fee / 100) : fee;
-
+    
+    // Fee is always subtracted from proceeds for SELL (all exchanges)
     try {
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) throw new Error('User not authenticated');
@@ -286,6 +280,8 @@ export const useSessionStore = create<State & Actions>((set, get) => ({
 
       await get().fetchAllSessions();
       await get().fetchDashboardStats();
+      return;
+
     } catch (error: any) {
       console.error('Error in addSmartSell:', error);
       throw error;
@@ -331,20 +327,23 @@ export const useSessionStore = create<State & Actions>((set, get) => ({
       .order("tx_time", { ascending: false })
       .limit(50000); // Increased from 5000 to 50000 for full export support
     
-    // Fetch session_sales by transaction ids (more robust than relation-name joins across environments)
-    const txIds = (txs || []).map((t: Transaction) => t.id).filter(Boolean) as string[];
+    // Fetch session_sales for the sessions we just fetched
+    const sessionIds = sessions?.map((s: Session) => s.id).filter(Boolean) || [];
     let sales: SessionSale[] = [];
     
-    if (txIds.length > 0) {
-      const { data: salesData, error: salesError } = await supabase.from("session_sales")
-        .select("*")
-        .in('tx_id', txIds)
+    if (sessionIds.length > 0) {
+      // Fetch sales related to these sessions
+      const { data: salesData } = await supabase.from("session_sales")
+        .select(`
+          *,
+          transactions!session_sales_tx_id_fkey (
+            id, price_idr, amount_usdt, total_idr, tx_time, type
+          )
+        `)
+        .in('session_id', sessionIds)
         .order("created_at", { ascending: false })
         .limit(50000); // Increased from 10000 to 50000
       
-      if (salesError) {
-        console.error('Failed to fetch session_sales:', salesError);
-      }
       sales = salesData || [];
     }
 
