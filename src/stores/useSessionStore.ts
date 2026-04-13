@@ -290,7 +290,25 @@ export const useSessionStore = create<State & Actions>((set, get) => ({
       });
 
       if (!rpcError && rpcData?.success) {
+        const txId = rpcData.tx_id as string | undefined;
         await get().fetchAllSessions();
+
+        if (txId) {
+          const hasSales = get().sessionSales.some(sale => sale.tx_id === txId);
+          if (!hasSales) {
+            try {
+              const { error: rebuildError } = await supabase.rpc('rebuild_user_profit', { target_user_id: user.id });
+              if (rebuildError) {
+                console.error('rebuild_user_profit error:', rebuildError);
+              } else {
+                await get().fetchAllSessions();
+              }
+            } catch (e) {
+              console.error('Failed to rebuild profit:', e);
+            }
+          }
+        }
+
         await get().fetchDashboardStats();
         return;
       }
@@ -393,6 +411,8 @@ export const useSessionStore = create<State & Actions>((set, get) => ({
         sessionSales: [...newSales, ...s.sessionSales]
       });
 
+      await get().fetchAllSessions();
+      await get().fetchDashboardStats();
     } catch (error: any) {
       console.error('Error in addSmartSell:', error);
       throw error;
