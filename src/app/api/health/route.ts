@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 
+export const dynamic = "force-dynamic";
+
 export async function GET() {
   const timestamp = new Date().toISOString();
 
@@ -17,7 +19,10 @@ export async function GET() {
           db: { ok: false, error: "Missing Supabase env vars" },
           timestamp,
         },
-        { status: 500 }
+        {
+          status: 500,
+          headers: { "Cache-Control": "no-store" },
+        }
       );
     }
 
@@ -36,15 +41,23 @@ export async function GET() {
           db: { ok: false, error: error.message },
           timestamp,
         },
-        { status: 500 }
+        {
+          status: 500,
+          headers: { "Cache-Control": "no-store" },
+        }
       );
     }
 
-    return NextResponse.json({
-      ok: true,
-      db: { ok: true, latencyMs },
-      timestamp,
-    });
+    return NextResponse.json(
+      {
+        ok: true,
+        db: { ok: true, latencyMs },
+        timestamp,
+      },
+      {
+        headers: { "Cache-Control": "no-store" },
+      }
+    );
   } catch (error: any) {
     return NextResponse.json(
       {
@@ -52,7 +65,10 @@ export async function GET() {
         db: { ok: false, error: error?.message || "Unknown error" },
         timestamp,
       },
-      { status: 500 }
+      {
+        status: 500,
+        headers: { "Cache-Control": "no-store" },
+      }
     );
   }
 }
