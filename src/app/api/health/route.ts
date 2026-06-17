@@ -2,6 +2,8 @@ import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 
 export async function GET() {
+  const timestamp = new Date().toISOString();
+
   try {
     const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
     const supabaseKey =
@@ -11,11 +13,9 @@ export async function GET() {
     if (!supabaseUrl || !supabaseKey) {
       return NextResponse.json(
         {
-          status: "error",
-          error: "Missing Supabase env vars",
-          hasUrl: !!supabaseUrl,
-          hasKey: !!supabaseKey,
-          timestamp: new Date().toISOString(),
+          ok: false,
+          db: { ok: false, error: "Missing Supabase env vars" },
+          timestamp,
         },
         { status: 500 }
       );
@@ -23,36 +23,34 @@ export async function GET() {
 
     const supabase = createClient(supabaseUrl, supabaseKey);
 
-    // Simple query to keep Supabase alive — touches the database
-    const { data, error } = await supabase
+    const start = Date.now();
+    const { error } = await supabase
       .from("transactions")
       .select("id", { count: "exact", head: true });
+    const latencyMs = Date.now() - start;
 
     if (error) {
       return NextResponse.json(
         {
-          status: "error",
-          error: error.message,
-          code: error.code,
-          timestamp: new Date().toISOString(),
+          ok: false,
+          db: { ok: false, error: error.message },
+          timestamp,
         },
         { status: 500 }
       );
     }
 
     return NextResponse.json({
-      status: "ok",
-      message: "Supabase keepalive ping successful",
-      timestamp: new Date().toISOString(),
+      ok: true,
+      db: { ok: true, latencyMs },
+      timestamp,
     });
   } catch (error: any) {
     return NextResponse.json(
       {
-        status: "error",
-        error: error?.message || "Unknown error",
-        stack:
-          process.env.NODE_ENV === "development" ? error?.stack : undefined,
-        timestamp: new Date().toISOString(),
+        ok: false,
+        db: { ok: false, error: error?.message || "Unknown error" },
+        timestamp,
       },
       { status: 500 }
     );
