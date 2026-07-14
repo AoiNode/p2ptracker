@@ -33,7 +33,7 @@ export default function V2Stats() {
     });
 
     sessionSales.forEach(sale => {
-      const key = dayjs(sale.created_at || sale.transactions?.tx_time).format("YYYY-MM");
+      const key = dayjs(sale.created_at).format("YYYY-MM");
       if (!months[key]) months[key] = { buy: 0, sell: 0, profit: 0, txCount: 0 };
       months[key].profit += sale.profit_idr;
     });
@@ -51,7 +51,7 @@ export default function V2Stats() {
       days[d] = 0;
     }
     sessionSales.forEach(sale => {
-      const d = dayjs(sale.created_at || sale.transactions?.tx_time).format("YYYY-MM-DD");
+      const d = dayjs(sale.created_at).format("YYYY-MM-DD");
       if (d in days) days[d] += sale.profit_idr;
     });
     return Object.entries(days);
