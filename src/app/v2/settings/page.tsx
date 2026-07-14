@@ -1,11 +1,10 @@
 "use client";
 import { useRouter } from "next/navigation";
-import { useTheme } from "@/contexts/ThemeContext";
 import { useSessionStore } from "@/stores/useSessionStore";
 import { supabase } from "@/lib/supabaseClient";
 import { formatIDR } from "@/lib/utils";
 import { 
-  ArrowLeft, Moon, Sun, Target, Bell, LogOut, 
+  ArrowLeft, Target, Bell, LogOut, 
   ChevronRight, ToggleLeft, BookOpen, Loader2, CheckCircle2, XCircle
 } from "lucide-react";
 import { useState } from "react";
@@ -13,7 +12,7 @@ import dayjs from "dayjs";
 
 export default function V2Settings() {
   const router = useRouter();
-  const { isDark, toggleTheme } = useTheme();
+  // Theme always dark in v2
   const targetMonthly = useSessionStore(s => s.targetMonthly);
   const [loggingOut, setLoggingOut] = useState(false);
   const [showTarget, setShowTarget] = useState(false);
@@ -244,23 +243,6 @@ export default function V2Settings() {
 
       {/* Settings List */}
       <div className="space-y-2">
-        {/* Dark Mode */}
-        <button
-          onClick={toggleTheme}
-          className="w-full bg-[#111827] rounded-xl p-4 border border-white/[0.06] flex items-center gap-3 active:bg-white/5 transition-colors"
-        >
-          <div className="w-10 h-10 rounded-xl bg-purple-500/15 flex items-center justify-center">
-            {isDark ? <Moon className="w-5 h-5 text-purple-400" /> : <Sun className="w-5 h-5 text-amber-400" />}
-          </div>
-          <div className="flex-1 text-left">
-            <p className="text-sm font-medium text-white">Mode Gelap</p>
-            <p className="text-[10px] text-gray-500">{isDark ? "Aktif" : "Nonaktif"}</p>
-          </div>
-          <div className={`w-10 h-6 rounded-full flex items-center transition-all ${isDark ? "bg-emerald-500 justify-end" : "bg-gray-600 justify-start"}`}>
-            <div className="w-4 h-4 bg-white rounded-full mx-1 shadow-sm" />
-          </div>
-        </button>
-
         {/* Target Bulanan */}
         <button
           onClick={() => setShowTarget(true)}
@@ -278,7 +260,7 @@ export default function V2Settings() {
 
         {/* Telegram Bot */}
         <button
-          onClick={() => router.push("/settings/telegram")}
+          onClick={() => router.push("/v2/settings/telegram")}
           className="w-full bg-[#111827] rounded-xl p-4 border border-white/[0.06] flex items-center gap-3 active:bg-white/5 transition-colors"
         >
           <div className="w-10 h-10 rounded-xl bg-sky-500/15 flex items-center justify-center">

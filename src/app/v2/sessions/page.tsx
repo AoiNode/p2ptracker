@@ -89,7 +89,7 @@ export default function V2Sessions() {
 
   const handleViewDetail = () => {
     if (selectedSession?.id) {
-      router.push(`/sessions/${selectedSession.id}`);
+      router.push(`/v2/sessions/${selectedSession.id}`);
       setShowActionSheet(false);
       setSelectedSession(null);
     }
