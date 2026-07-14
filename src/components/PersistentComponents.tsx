@@ -8,8 +8,8 @@ export default function PersistentComponents() {
   const pathname = usePathname();
   const { user } = useAuth();
 
-  // Don't show navbar on login/register pages or if not authenticated
-  const showNavbar = user && !pathname.includes('/login') && !pathname.includes('/register');
+  // Don't show navbar on login/register pages, v2 routes, or if not authenticated
+  const showNavbar = user && !pathname.includes('/login') && !pathname.includes('/register') && !pathname.startsWith('/v2');
 
   // Only show FAB on specific pages: dashboard, transaksi, and sesi (sessions)
   const showFAB = showNavbar && (

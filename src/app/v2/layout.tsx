@@ -33,6 +33,17 @@ export default function V2Layout({ children }: { children: React.ReactNode }) {
   return (
     <div className="min-h-screen bg-[#0a0e1a] text-white pb-20">
       <div className="max-w-lg mx-auto relative">
+        {/* V1/V2 Switch - pojok kanan atas */}
+        <div className="absolute top-4 right-4 z-10 flex items-center gap-2">
+          <span className="text-[10px] font-medium text-gray-500">V1</span>
+          <button
+            onClick={() => router.push("/")}
+            className="relative inline-flex h-5 w-9 items-center rounded-full bg-emerald-500 transition-colors focus:outline-none"
+          >
+            <span className="inline-block h-3.5 w-3.5 transform rounded-full bg-white shadow-sm translate-x-4.5" />
+          </button>
+          <span className="text-[10px] font-medium text-emerald-400">V2</span>
+        </div>
         {children}
       </div>
       <BottomNav />

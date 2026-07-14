@@ -271,12 +271,16 @@ export default function SettingsPage() {
               <p className="text-gray-500 dark:text-gray-400 text-sm">Kelola preferensi aplikasi</p>
             </div>
           </div>
-          <button
-            onClick={() => router.push('/v2')}
-            className="px-3 py-1.5 bg-emerald-500/10 border border-emerald-500/30 rounded-xl text-emerald-600 dark:text-emerald-400 text-xs font-bold hover:bg-emerald-500/20 transition-colors"
-          >
-            V2
-          </button>
+          <div className="flex items-center gap-2">
+            <span className="text-xs font-medium text-gray-500 dark:text-gray-400">V1</span>
+            <button
+              onClick={() => router.push('/v2')}
+              className="relative inline-flex h-6 w-11 items-center rounded-full bg-gray-300 dark:bg-gray-600 transition-colors focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:ring-offset-2"
+            >
+              <span className="inline-block h-4 w-4 transform rounded-full bg-white shadow-sm translate-x-1" />
+            </button>
+            <span className="text-xs font-medium text-emerald-600 dark:text-emerald-400">V2</span>
+          </div>
         </div>
         
         <div className="space-y-8">

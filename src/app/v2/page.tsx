@@ -43,6 +43,12 @@ export default function V2Dashboard() {
   const activeSessions = sessions.filter(sess => sess.status === "active" || sess.remaining_usdt > 0.00000001);
   const displayTx = recentTx.length > 0 ? recentTx : transactions.slice(0, 5);
   const totalProfit = s.saldoAkhir - s.totalBuy;
+  
+  // Sisa saldo = total remaining USDT dari sesi aktif, dikonversi ke IDR
+  const sisaSaldoIDR = activeSessions.reduce((sum, sess) => {
+    const costPerUsdt = sess.avg_cost || sess.price_idr || 0;
+    return sum + (sess.remaining_usdt * costPerUsdt);
+  }, 0);
 
   return (
     <div className="px-4 pt-6 pb-4">
@@ -69,13 +75,13 @@ export default function V2Dashboard() {
         
         <div className="relative">
           <div className="flex items-center justify-between mb-1">
-            <span className="text-emerald-100 text-xs font-medium">Total Saldo</span>
+            <span className="text-emerald-100 text-xs font-medium">Sisa Saldo</span>
             <button onClick={() => setHideBalance(!hideBalance)} className="p-1">
               {hideBalance ? <EyeOff className="w-4 h-4 text-emerald-200" /> : <Eye className="w-4 h-4 text-emerald-200" />}
             </button>
           </div>
           <p className="text-3xl font-bold text-white mb-4">
-            {hideBalance ? "••••••••" : formatIDR(s.saldoAkhir)}
+            {hideBalance ? "••••••••" : formatIDR(sisaSaldoIDR)}
           </p>
           
           <div className="grid grid-cols-2 gap-3">
