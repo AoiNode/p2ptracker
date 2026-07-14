@@ -4,7 +4,7 @@ import { useParams, useRouter } from "next/navigation";
 import { useSessionStore } from "@/stores/useSessionStore";
 import EditTransactionModal from "@/components/EditTransactionModal";
 import { formatIDR } from "@/lib/utils";
-import { Session, Transaction, SessionSale } from "@/lib/types";
+import { Session, Transaction, SessionSale, ExchangeLabel } from "@/lib/types";
 import { supabase } from "@/lib/supabaseClient";
 import { 
   ArrowLeft, Layers, Clock, TrendingUp, ArrowDownLeft, ArrowUpRight, 
@@ -93,10 +93,10 @@ export default function V2SessionDetail() {
             await supabase.from('session_sales').delete().eq('session_id', session.id);
           }
         } else {
-          const newTotalBuyUsdt = otherBuyTxs.reduce((sum, t: any) => sum + t.amount_usdt, 0);
+          const newTotalBuyUsdt = otherBuyTxs.reduce((sum: number, t: any) => sum + t.amount_usdt, 0);
           const { data: relatedSales } = await supabase.from('session_sales').select('*').eq('session_id', session.id).order('created_at', { ascending: true });
           if (relatedSales && relatedSales.length > 0) {
-            const totalSold = relatedSales.reduce((sum, s: any) => sum + s.sold_usdt, 0);
+            const totalSold = relatedSales.reduce((sum: number, s: any) => sum + s.sold_usdt, 0);
             if (totalSold > newTotalBuyUsdt) {
               let remaining = totalSold - newTotalBuyUsdt;
               for (const sale of [...relatedSales].reverse()) {
@@ -144,14 +144,20 @@ export default function V2SessionDetail() {
     } finally { setIsDeleting(false); }
   };
 
-  const handleEditTransaction = async (updatedTx: Transaction) => {
+  const handleEditTransaction = async (txId: string, price: number, amount: number, fee: number, feeType: 'percent' | 'value', txTime: Date, label?: ExchangeLabel) => {
     try {
-      await supabase.from('transactions').update({
-        price_idr: updatedTx.price_idr, amount_usdt: updatedTx.amount_usdt,
-        total_idr: updatedTx.total_idr, label: updatedTx.label, fee_idr: updatedTx.fee_idr
-      }).eq('id', updatedTx.id);
+      // Calculate total_idr based on type
+      const tx = transactions.find(t => t.id === txId);
+      const feeAmount = feeType === 'percent' ? (amount * price * fee / 100) : fee;
+      const totalIdr = tx?.type === 'BUY' ? (amount * price + feeAmount) : (amount * price - feeAmount);
 
-      if (updatedTx.type === 'BUY' && session) {
+      await supabase.from('transactions').update({
+        price_idr: price, amount_usdt: amount,
+        total_idr: totalIdr, label: label || tx?.label, fee_idr: feeAmount,
+        tx_time: txTime.toISOString()
+      }).eq('id', txId);
+
+      if (tx?.type === 'BUY' && session) {
         const { data: allBuyTxs } = await supabase.from('transactions').select('*').eq('session_id', session.id).eq('type', 'BUY').order('tx_time', { ascending: true });
         const newTotalInvest = allBuyTxs?.reduce((sum: number, t: any) => sum + t.total_idr, 0) || 0;
         const newTotalUsdt = allBuyTxs?.reduce((sum: number, t: any) => sum + t.amount_usdt, 0) || 0;

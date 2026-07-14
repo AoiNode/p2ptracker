@@ -3,9 +3,10 @@ import { useEffect, useState, useMemo } from "react";
 import { useSessionStore, computeSessionDashboard } from "@/stores/useSessionStore";
 import { useAuth } from "@/contexts/AuthContext";
 import { formatIDR } from "@/lib/utils";
+import { supabase } from "@/lib/supabaseClient";
 import { 
   BarChart3, TrendingUp, TrendingDown, Calendar, 
-  ArrowUpRight, ArrowDownLeft, Wallet
+  ArrowUpRight, ArrowDownLeft, Wallet, Download
 } from "lucide-react";
 import dayjs from "dayjs";
 
@@ -16,9 +17,50 @@ export default function V2Stats() {
   const sessionSales = useSessionStore(s => s.sessionSales);
   const s = computeSessionDashboard();
 
+  // Monthly summary state
+  const [monthlyHistory, setMonthlyHistory] = useState<any[]>([]);
+  const [selectedYear, setSelectedYear] = useState(new Date().getFullYear());
+  const [selectedSummaryMonth, setSelectedSummaryMonth] = useState<string>("all");
+  const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun', 'Jul', 'Agu', 'Sep', 'Okt', 'Nov', 'Des'];
+
   useEffect(() => {
     if (user) fetchAllSessions();
   }, [user]);
+
+  // Fetch monthly history
+  useEffect(() => {
+    const fetchMonthlyHistory = async () => {
+      try {
+        const { data: { user: u } } = await supabase.auth.getUser();
+        if (!u) return;
+        const { data, error } = await supabase.rpc('get_monthly_profit_history', {
+          target_user_id: u.id, target_year: null
+        });
+        if (!error && data) setMonthlyHistory(data);
+      } catch (e) {
+        console.error("Error fetching monthly history:", e);
+      }
+    };
+    fetchMonthlyHistory();
+  }, []);
+
+  // Available years
+  const availableYears = useMemo(() => {
+    return Array.from(new Set([
+      ...transactions.map(t => new Date(t.tx_time).getFullYear()),
+      ...sessionSales.filter(s => s.created_at).map(s => new Date(s.created_at!).getFullYear()),
+      ...monthlyHistory.map(m => new Date(m.month_key).getFullYear()),
+      new Date().getFullYear()
+    ])).sort((a, b) => b - a);
+  }, [transactions, sessionSales, monthlyHistory]);
+
+  // Filtered monthly history
+  const monthlyHistoryForYear = useMemo(() => {
+    return monthlyHistory
+      .filter(m => new Date(m.month_key).getFullYear() === selectedYear)
+      .filter(m => selectedSummaryMonth === "all" || new Date(m.month_key).getMonth() === Number(selectedSummaryMonth))
+      .sort((a, b) => new Date(a.month_key).getTime() - new Date(b.month_key).getTime());
+  }, [monthlyHistory, selectedYear, selectedSummaryMonth]);
 
   // Monthly breakdown
   const monthlyData = useMemo(() => {
@@ -176,7 +218,7 @@ export default function V2Stats() {
       </div>
 
       {/* Top Exchanges */}
-      <div className="bg-[#111827] rounded-xl p-4 border border-white/[0.06]">
+      <div className="bg-[#111827] rounded-xl p-4 border border-white/[0.06] mb-4">
         <h3 className="text-sm font-semibold text-gray-300 mb-3">Exchange Favorit</h3>
         <div className="space-y-2.5">
           {exchangeStats.map(([label, data], i) => {
@@ -210,6 +252,71 @@ export default function V2Stats() {
             <p className="text-sm text-gray-600 text-center py-4">Belum ada data</p>
           )}
         </div>
+      </div>
+
+      {/* Ringkasan Bulanan Tersimpan */}
+      <div className="bg-[#111827] rounded-xl p-4 border border-white/[0.06] mb-4">
+        <div className="flex flex-col gap-3 mb-4 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <h3 className="text-sm font-semibold text-gray-300">Ringkasan Bulanan Tersimpan</h3>
+            <p className="text-[10px] text-gray-500 mt-0.5">
+              Profit bulan kalender yang tetap tersimpan setelah Tutup Buku
+            </p>
+          </div>
+          <div className="flex gap-1.5">
+            <select
+              value={selectedYear}
+              onChange={(e) => setSelectedYear(Number(e.target.value))}
+              className="bg-[#0a0e1a] border border-white/[0.06] rounded-lg px-2 py-1.5 text-xs text-gray-300 focus:outline-none focus:border-emerald-500/50 cursor-pointer"
+            >
+              {availableYears.map(year => (
+                <option key={year} value={year}>{year}</option>
+              ))}
+            </select>
+            <select
+              value={selectedSummaryMonth}
+              onChange={(e) => setSelectedSummaryMonth(e.target.value)}
+              className="bg-[#0a0e1a] border border-white/[0.06] rounded-lg px-2 py-1.5 text-xs text-gray-300 focus:outline-none focus:border-emerald-500/50 cursor-pointer"
+            >
+              <option value="all">Semua</option>
+              {monthNames.map((m, idx) => (
+                <option key={m} value={idx}>{m}</option>
+              ))}
+            </select>
+          </div>
+        </div>
+
+        {monthlyHistoryForYear.length > 0 ? (
+          <div className="space-y-2">
+            {monthlyHistoryForYear.map((item) => (
+              <div
+                key={item.month_key}
+                className="flex items-center justify-between gap-3 bg-[#0a0e1a] rounded-xl px-3.5 py-3 border border-white/[0.04]"
+              >
+                <div>
+                  <p className="text-xs font-bold text-gray-300">
+                    {dayjs(item.month_start).format('MMMM YYYY')}
+                  </p>
+                  <p className="text-[10px] text-gray-600">
+                    {dayjs(item.month_start).format('DD MMM')} - {dayjs(item.month_end).format('DD MMM')}
+                  </p>
+                </div>
+                <div className="text-right">
+                  <p className={`text-xs font-bold ${Number(item.total_profit_idr) >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
+                    {formatIDR(Number(item.total_profit_idr || 0))}
+                  </p>
+                  <p className="text-[10px] text-gray-600">
+                    {item.is_finalized ? '✓ Final' : '● Berjalan'}
+                  </p>
+                </div>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <div className="text-center py-6 text-gray-600">
+            <p className="text-xs">Tidak ada ringkasan bulanan</p>
+          </div>
+        )}
       </div>
     </div>
   );
