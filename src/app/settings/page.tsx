@@ -261,14 +261,22 @@ export default function SettingsPage() {
   return (
     <PageWrapper>
       <main className="pb-28 px-4 pt-4 dark:bg-gray-900 min-h-screen">
-        <div className="flex items-center gap-3 mb-6">
-          <div className="p-3 bg-gray-100 dark:bg-gray-800 rounded-2xl">
-            <span className="text-2xl">{currentTheme.icons.settings || '⚙️'}</span>
+        <div className="flex items-center justify-between mb-6">
+          <div className="flex items-center gap-3">
+            <div className="p-3 bg-gray-100 dark:bg-gray-800 rounded-2xl">
+              <span className="text-2xl">{currentTheme.icons.settings || '⚙️'}</span>
+            </div>
+            <div>
+              <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Pengaturan</h1>
+              <p className="text-gray-500 dark:text-gray-400 text-sm">Kelola preferensi aplikasi</p>
+            </div>
           </div>
-          <div>
-            <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Pengaturan</h1>
-            <p className="text-gray-500 dark:text-gray-400 text-sm">Kelola preferensi aplikasi</p>
-          </div>
+          <button
+            onClick={() => router.push('/v2')}
+            className="px-3 py-1.5 bg-emerald-500/10 border border-emerald-500/30 rounded-xl text-emerald-600 dark:text-emerald-400 text-xs font-bold hover:bg-emerald-500/20 transition-colors"
+          >
+            V2
+          </button>
         </div>
         
         <div className="space-y-8">
