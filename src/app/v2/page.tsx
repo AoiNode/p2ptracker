@@ -75,16 +75,25 @@ export default function V2Dashboard() {
         
         <div className="relative">
           <div className="flex items-center justify-between mb-1">
-            <span className="text-emerald-100 text-xs font-medium">Sisa Saldo</span>
+            <span className="text-emerald-100 text-xs font-medium">Profit Bulan Ini</span>
             <button onClick={() => setHideBalance(!hideBalance)} className="p-1">
               {hideBalance ? <EyeOff className="w-4 h-4 text-emerald-200" /> : <Eye className="w-4 h-4 text-emerald-200" />}
             </button>
           </div>
           <p className="text-3xl font-bold text-white mb-4">
-            {hideBalance ? "••••••••" : formatIDR(sisaSaldoIDR)}
+            {hideBalance ? "••••••••" : formatIDR(s.monthlyPL)}
           </p>
           
           <div className="grid grid-cols-2 gap-3">
+            <div className="bg-white/15 backdrop-blur-sm rounded-xl p-3">
+              <div className="flex items-center gap-1.5 mb-1">
+                <TrendingUp className="w-3.5 h-3.5 text-emerald-200" />
+                <span className="text-emerald-100 text-[10px] font-medium">Sisa Saldo</span>
+              </div>
+              <p className="text-sm font-bold text-white">
+                {hideBalance ? "••••" : formatIDR(sisaSaldoIDR)}
+              </p>
+            </div>
             <div className="bg-white/15 backdrop-blur-sm rounded-xl p-3">
               <div className="flex items-center gap-1.5 mb-1">
                 <ArrowUpRight className="w-3.5 h-3.5 text-emerald-200" />
@@ -92,15 +101,6 @@ export default function V2Dashboard() {
               </div>
               <p className="text-sm font-bold text-white">
                 {hideBalance ? "••••" : formatIDR(s.todayPL)}
-              </p>
-            </div>
-            <div className="bg-white/15 backdrop-blur-sm rounded-xl p-3">
-              <div className="flex items-center gap-1.5 mb-1">
-                <TrendingUp className="w-3.5 h-3.5 text-emerald-200" />
-                <span className="text-emerald-100 text-[10px] font-medium">Profit Bulan Ini</span>
-              </div>
-              <p className="text-sm font-bold text-white">
-                {hideBalance ? "••••" : formatIDR(s.monthlyPL)}
               </p>
             </div>
           </div>
@@ -111,8 +111,8 @@ export default function V2Dashboard() {
       <div className="grid grid-cols-3 gap-2 mb-6">
         <div className="bg-[#111827] rounded-xl p-3 border border-white/[0.06]">
           <Wallet className="w-4 h-4 text-blue-400 mb-1.5" />
-          <p className="text-[10px] text-gray-500 mb-0.5">Modal Aktif</p>
-          <p className="text-xs font-bold text-white">{formatIDR(s.totalBuy)}</p>
+          <p className="text-[10px] text-gray-500 mb-0.5">Sisa USDT</p>
+          <p className="text-xs font-bold text-white">{activeSessions.reduce((sum, sess) => sum + sess.remaining_usdt, 0).toFixed(2)}</p>
         </div>
         <div className="bg-[#111827] rounded-xl p-3 border border-white/[0.06]">
           <Layers className="w-4 h-4 text-purple-400 mb-1.5" />

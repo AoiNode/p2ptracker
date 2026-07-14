@@ -5,15 +5,12 @@ import { useAuth } from "@/contexts/AuthContext";
 import { formatIDR } from "@/lib/utils";
 import { useRouter } from "next/navigation";
 import { 
-  ArrowUpRight, ArrowDownLeft, Clock, Search, Filter, 
-  ChevronDown, X, Upload
+  ArrowUpRight, ArrowDownLeft, Clock, Search, 
+  X, Plus
 } from "lucide-react";
 import dayjs from "dayjs";
 import relativeTime from "dayjs/plugin/relativeTime";
 import "dayjs/locale/id";
-import dynamic from "next/dynamic";
-
-const ImportTransactionModal = dynamic(() => import("@/components/ImportTransactionModal"), { ssr: false });
 
 dayjs.extend(relativeTime);
 dayjs.locale("id");
@@ -28,8 +25,6 @@ export default function V2Transactions() {
   
   const [search, setSearch] = useState("");
   const [filter, setFilter] = useState<FilterType>("ALL");
-  const [showImport, setShowImport] = useState(false);
-  const [showFilter, setShowFilter] = useState(false);
 
   useEffect(() => {
     if (user) fetchAllSessions();
@@ -61,10 +56,10 @@ export default function V2Transactions() {
           <p className="text-xs text-gray-500 mt-0.5">{transactions.length} total transaksi</p>
         </div>
         <button
-          onClick={() => setShowImport(true)}
-          className="w-10 h-10 bg-[#111827] border border-white/[0.06] rounded-xl flex items-center justify-center active:scale-95 transition-transform"
+          onClick={() => router.push("/v2/transaksi/new")}
+          className="w-10 h-10 bg-emerald-500 rounded-xl flex items-center justify-center shadow-lg shadow-emerald-500/30 active:scale-95 transition-transform"
         >
-          <Upload className="w-4 h-4 text-gray-400" />
+          <Plus className="w-5 h-5 text-white" />
         </button>
       </div>
 
@@ -172,14 +167,6 @@ export default function V2Transactions() {
           </div>
         )}
       </div>
-
-      {showImport && (
-        <ImportTransactionModal 
-          isOpen={showImport} 
-          onClose={() => setShowImport(false)} 
-          onSuccess={() => fetchAllSessions()} 
-        />
-      )}
     </div>
   );
 }

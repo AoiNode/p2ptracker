@@ -7,7 +7,7 @@ const navItems = [
   { path: "/v2/transaksi", icon: ArrowLeftRight, label: "Transaksi" },
   { path: "/v2/sessions", icon: Layers, label: "Sesi" },
   { path: "/v2/statistik", icon: BarChart3, label: "Statistik" },
-  { path: "/settings", icon: Settings, label: "Lainnya" },
+  { path: "/v2/settings", icon: Settings, label: "Lainnya" },
 ];
 
 export default function BottomNav() {
@@ -16,7 +16,7 @@ export default function BottomNav() {
 
   const isActive = (path: string) => {
     if (path === "/v2") return pathname === "/v2";
-    if (path === "/settings") return pathname.startsWith("/settings");
+    if (path === "/v2/settings") return pathname.startsWith("/v2/settings");
     return pathname.startsWith(path);
   };
 
