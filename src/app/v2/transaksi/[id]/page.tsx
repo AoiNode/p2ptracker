@@ -92,7 +92,7 @@ export default function V2TransactionDetail() {
         .eq('tx_id', transaction.id);
       
       if (sales && sales.length > 0) {
-        const details = sales.map(sale => {
+        const details = sales.map((sale: any) => {
           const session = sessions.find(s => s.id === sale.session_id);
           return {
             sessionDate: session ? dayjs(session.created_at).format('DD MMM YYYY') : '-',
