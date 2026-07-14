@@ -88,8 +88,9 @@ export default function V2Stats() {
         </div>
         <div className="bg-[#111827] rounded-xl p-4 border border-white/[0.06]">
           <Wallet className="w-5 h-5 text-blue-400 mb-2" />
-          <p className="text-[10px] text-gray-500 mb-0.5">Total Modal</p>
-          <p className="text-sm font-bold text-white">{formatIDR(s.totalBuy)}</p>
+          <p className="text-[10px] text-gray-500 mb-1">Total Beli / Jual</p>
+          <p className="text-xs font-bold text-emerald-400 mb-0.5">{formatIDR(s.totalBuy)}</p>
+          <p className="text-xs font-bold text-red-400">{formatIDR(transactions.filter(t => t.type === 'SELL').reduce((acc, t) => acc + t.total_idr, 0))}</p>
         </div>
         <div className="bg-[#111827] rounded-xl p-4 border border-white/[0.06]">
           <BarChart3 className="w-5 h-5 text-purple-400 mb-2" />

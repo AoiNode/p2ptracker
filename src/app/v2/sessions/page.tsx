@@ -4,9 +4,12 @@ import { useSessionStore } from "@/stores/useSessionStore";
 import { useAuth } from "@/contexts/AuthContext";
 import { formatIDR } from "@/lib/utils";
 import { useRouter } from "next/navigation";
+import { Session } from "@/lib/types";
+import { supabase } from "@/lib/supabaseClient";
 import { 
-  Layers, ChevronRight, Clock, TrendingUp, 
-  ArrowDownLeft, CircleDot, CheckCircle2
+  Layers, Clock, TrendingUp, 
+  ArrowDownLeft, CircleDot, CheckCircle2,
+  Pencil, Trash2, X, ChevronRight
 } from "lucide-react";
 import dayjs from "dayjs";
 import relativeTime from "dayjs/plugin/relativeTime";
@@ -20,7 +23,16 @@ export default function V2Sessions() {
   const router = useRouter();
   const fetchAllSessions = useSessionStore(s => s.fetchAllSessions);
   const sessions = useSessionStore(s => s.sessions);
+  const transactions = useSessionStore(s => s.transactions);
+  const sessionSales = useSessionStore(s => s.sessionSales);
   const [tab, setTab] = useState<"active" | "closed">("active");
+  
+  // Action sheet state
+  const [selectedSession, setSelectedSession] = useState<Session | null>(null);
+  const [showActionSheet, setShowActionSheet] = useState(false);
+  const [deleteConfirm, setDeleteConfirm] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
+  const [editMode, setEditMode] = useState(false);
 
   useEffect(() => {
     if (user) fetchAllSessions();
@@ -39,6 +51,49 @@ export default function V2Sessions() {
   const totalCapital = activeSessions.reduce((s, sess) => s + sess.total_invest_idr, 0);
   const totalRemainingUSDT = activeSessions.reduce((s, sess) => s + sess.remaining_usdt, 0);
   const totalProfit = activeSessions.reduce((s, sess) => s + sess.realized_profit_idr, 0);
+
+  const handleSessionClick = (sess: Session) => {
+    setSelectedSession(sess);
+    setShowActionSheet(true);
+  };
+
+  const handleDeleteSession = async () => {
+    if (!selectedSession || isDeleting) return;
+    setIsDeleting(true);
+    
+    try {
+      // Get related sell transactions
+      const { data: salesData } = await supabase
+        .from('session_sales')
+        .select('tx_id')
+        .eq('session_id', selectedSession.id);
+      
+      const sellTxIds = salesData?.map((s: any) => s.tx_id) || [];
+      if (sellTxIds.length > 0) {
+        await supabase.from('transactions').delete().in('id', sellTxIds);
+      }
+      
+      await supabase.from('sessions').delete().eq('id', selectedSession.id);
+      
+      await fetchAllSessions();
+      setShowActionSheet(false);
+      setDeleteConfirm(false);
+      setSelectedSession(null);
+    } catch (error) {
+      console.error('Error deleting session:', error);
+      alert('Gagal menghapus sesi');
+    } finally {
+      setIsDeleting(false);
+    }
+  };
+
+  const handleViewDetail = () => {
+    if (selectedSession?.id) {
+      router.push(`/sessions/${selectedSession.id}`);
+      setShowActionSheet(false);
+      setSelectedSession(null);
+    }
+  };
 
   return (
     <div className="px-4 pt-6 pb-4">
@@ -97,7 +152,11 @@ export default function V2Sessions() {
           const isActive = sess.status === "active" && sess.remaining_usdt > 0.00000001;
 
           return (
-            <div key={sess.id || i} className="bg-[#111827] rounded-xl p-4 border border-white/[0.06]">
+            <div 
+              key={sess.id || i} 
+              onClick={() => handleSessionClick(sess)}
+              className="bg-[#111827] rounded-xl p-4 border border-white/[0.06] cursor-pointer active:bg-white/5 transition-colors"
+            >
               <div className="flex items-start justify-between mb-3">
                 <div className="flex items-center gap-2.5">
                   <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${
@@ -118,13 +177,16 @@ export default function V2Sessions() {
                     </p>
                   </div>
                 </div>
-                <span className={`text-[10px] font-medium px-2 py-0.5 rounded-full ${
-                  isActive 
-                    ? "bg-emerald-500/15 text-emerald-400" 
-                    : "bg-gray-800 text-gray-500"
-                }`}>
-                  {isActive ? "Aktif" : "Selesai"}
-                </span>
+                <div className="flex items-center gap-2">
+                  <span className={`text-[10px] font-medium px-2 py-0.5 rounded-full ${
+                    isActive 
+                      ? "bg-emerald-500/15 text-emerald-400" 
+                      : "bg-gray-800 text-gray-500"
+                  }`}>
+                    {isActive ? "Aktif" : "Selesai"}
+                  </span>
+                  <ChevronRight className="w-4 h-4 text-gray-600" />
+                </div>
               </div>
 
               <div className="grid grid-cols-3 gap-2 mb-3">
@@ -169,6 +231,80 @@ export default function V2Sessions() {
           </div>
         )}
       </div>
+
+      {/* Action Sheet */}
+      {showActionSheet && selectedSession && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-end justify-center">
+          <div className="w-full max-w-lg" onClick={e => e.stopPropagation()}>
+            <div 
+              className="bg-[#111827] rounded-t-2xl p-5 border-t border-white/[0.06]"
+              onClick={() => { setShowActionSheet(false); setSelectedSession(null); }}
+            >
+              <div className="w-10 h-1 bg-gray-600 rounded-full mx-auto mb-4" />
+              
+              <div className="mb-4">
+                <p className="text-sm font-bold text-white mb-1">Sesi #{selectedSession.id?.slice(0, 8)}</p>
+                <p className="text-xs text-gray-500">
+                  {formatIDR(selectedSession.total_invest_idr)} • {selectedSession.remaining_usdt.toFixed(4)} USDT tersisa
+                </p>
+              </div>
+
+              <div className="space-y-2">
+                <button
+                  onClick={handleViewDetail}
+                  className="w-full py-3.5 bg-emerald-500/10 border border-emerald-500/20 rounded-xl text-sm font-medium text-emerald-400 flex items-center justify-center gap-2 active:bg-emerald-500/20"
+                >
+                  <Pencil className="w-4 h-4" />
+                  Detail & Edit
+                </button>
+                <button
+                  onClick={() => setDeleteConfirm(true)}
+                  className="w-full py-3.5 bg-red-500/10 border border-red-500/20 rounded-xl text-sm font-medium text-red-400 flex items-center justify-center gap-2 active:bg-red-500/20"
+                >
+                  <Trash2 className="w-4 h-4" />
+                  Hapus Sesi
+                </button>
+                <button
+                  onClick={() => { setShowActionSheet(false); setSelectedSession(null); }}
+                  className="w-full py-3.5 bg-white/5 rounded-xl text-sm font-medium text-gray-400"
+                >
+                  Batal
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Delete Confirm */}
+      {deleteConfirm && selectedSession && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[60] flex items-center justify-center px-4">
+          <div className="bg-[#111827] rounded-2xl p-5 w-full max-w-sm border border-white/[0.06]">
+            <div className="text-center mb-4">
+              <div className="w-12 h-12 bg-red-500/15 rounded-full flex items-center justify-center mx-auto mb-3">
+                <Trash2 className="w-6 h-6 text-red-400" />
+              </div>
+              <h3 className="text-sm font-bold text-white mb-1">Hapus Sesi?</h3>
+              <p className="text-xs text-gray-500">Sesi dan semua transaksi terkait akan dihapus. Tindakan ini tidak dapat dibatalkan.</p>
+            </div>
+            <div className="flex gap-2">
+              <button
+                onClick={() => setDeleteConfirm(false)}
+                className="flex-1 py-3 bg-white/5 text-gray-400 rounded-xl text-sm font-medium"
+              >
+                Batal
+              </button>
+              <button
+                onClick={handleDeleteSession}
+                disabled={isDeleting}
+                className="flex-1 py-3 bg-red-500 text-white rounded-xl text-sm font-bold disabled:opacity-50"
+              >
+                {isDeleting ? "Menghapus..." : "Hapus"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
