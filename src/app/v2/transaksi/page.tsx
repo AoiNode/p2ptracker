@@ -172,15 +172,15 @@ export default function V2Transactions() {
         onClick={() => {
           if (isSelectionMode && tx.id) {
             toggleSelect(tx.id);
-          } else if (!isSelectionMode && tx.session_id) {
-            router.push(`/v2/sessions/${tx.session_id}`);
+          } else if (!isSelectionMode && tx.id) {
+            router.push(`/v2/transaksi/${tx.id}`);
           }
         }}
         className={`bg-[#111827] rounded-xl p-3.5 border flex items-center gap-3 transition-all ${
           isSelectionMode && selectedTxIds.has(tx.id) 
             ? "border-emerald-500/50 bg-emerald-500/5" 
             : "border-white/[0.06]"
-        } ${isSelectionMode || tx.session_id ? "cursor-pointer active:bg-white/5" : ""}`}
+        } ${isSelectionMode || tx.id ? "cursor-pointer active:bg-white/5" : ""}`}
       >
         {isSelectionMode && (
           <div className={`w-5 h-5 rounded-md border-2 flex items-center justify-center flex-shrink-0 ${
