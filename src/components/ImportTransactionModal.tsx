@@ -151,7 +151,35 @@ export default function ImportTransactionModal({ isOpen, onClose, onSuccess }: I
         const wb = XLSX.read(bstr, { type: 'binary', cellDates: true });
         const wsname = wb.SheetNames[0];
         const ws = wb.Sheets[wsname];
-        const data = XLSX.utils.sheet_to_json(ws);
+        
+        // Read raw rows to detect header position (Bybit export has headers on row 3)
+        const rawData = XLSX.utils.sheet_to_json(ws, { header: 1 }) as any[][];
+        
+        // Find the header row: look for a row containing known column names
+        let headerRowIndex = 0;
+        const knownHeaders = ['order no', 'direction', 'unit price', 'coin amount', 'fiat amount', 'type', 'side', 'price', 'date', 'created time'];
+        for (let i = 0; i < Math.min(10, rawData.length); i++) {
+          const rowStr = (rawData[i] || []).map((v: any) => (v || '').toString().toLowerCase()).join(' ');
+          if (knownHeaders.some(h => rowStr.includes(h))) {
+            headerRowIndex = i;
+            break;
+          }
+        }
+        
+        // Use detected header row
+        const headers = (rawData[headerRowIndex] || []).map((h: any) => (h || '').toString().trim());
+        const dataRows = rawData.slice(headerRowIndex + 1);
+        
+        // Convert to objects using detected headers
+        const data = dataRows
+          .filter((row: any[]) => row.some((cell: any) => cell != null && cell !== ''))
+          .map((row: any[]) => {
+            const obj: Record<string, any> = {};
+            headers.forEach((h, i) => {
+              if (h) obj[h] = row[i];
+            });
+            return obj;
+          });
         
         processData(data);
       } catch (error) {
@@ -164,24 +192,23 @@ export default function ImportTransactionModal({ isOpen, onClose, onSuccess }: I
 
   const processData = (data: any[]) => {
     const processed: ParsedTransaction[] = data.map((row: any, index) => {
-      // Map columns based on user request: Type, Fiat Amount, Price
-      // Try to detect common variations or use exact names
-      const typeRaw = row['Type'] || row['type'] || row['Side'] || 'BUY';
+      // Map columns - supports both old format (Type/Price/Crypto Amount) and Bybit export (Direction/Unit Price/Coin Amount)
+      const typeRaw = row['Direction'] || row['Type'] || row['type'] || row['Side'] || 'BUY';
       const type: 'BUY' | 'SELL' = typeRaw.toString().toUpperCase().includes('SELL') ? 'SELL' : 'BUY';
       
       const fiatAmount = parseFloat(row['Fiat Amount'] || row['fiat amount'] || row['Total'] || '0');
-      const price = parseFloat(row['Price'] || row['price'] || '0');
+      const price = parseFloat(row['Unit Price'] || row['Price'] || row['price'] || '0');
       
-      // Calculate USDT amount if not present, or use Crypto Amount if available
-      let usdtAmount = parseFloat(row['Crypto Amount'] || row['Amount'] || '0');
+      // Calculate USDT amount if not present, or use Coin Amount / Crypto Amount if available
+      let usdtAmount = parseFloat(row['Coin Amount'] || row['Crypto Amount'] || row['Amount'] || '0');
       if (!usdtAmount && price > 0) {
         usdtAmount = fiatAmount / price;
       }
       
       // Try to parse date, default to now if missing
+      // Supports Bybit export with timezone offset like 'Time (UTC+07:00)'
       let date = new Date();
-      // Added 'Time (UTC+0)' based on user request
-      const rawDate = row['Date'] || row['Created Time'] || row['Time (UTC+0)'] || row['Time'];
+      const rawDate = row['Time (UTC+07:00)'] || row['Time (UTC+0)'] || row['Date'] || row['Created Time'] || row['Time'];
       if (rawDate) {
         if (rawDate instanceof Date) {
           date = rawDate;
@@ -206,8 +233,10 @@ export default function ImportTransactionModal({ isOpen, onClose, onSuccess }: I
       });
 
       // Check status column for canceled transactions
+      // Bybit uses 'Completed', 'Canceled', etc.
       const statusRaw = row['Status'] || row['status'] || '';
-      const isCanceled = statusRaw.toString().toLowerCase().includes('canceled') || statusRaw.toString().toLowerCase().includes('cancelled');
+      const statusStr = statusRaw.toString().toLowerCase();
+      const isCanceled = statusStr.includes('cancel');
       
       const status: ParsedTransaction['status'] = isCanceled ? 'canceled' : (isDuplicate ? 'duplicate' : 'pending');
 
@@ -345,7 +374,7 @@ export default function ImportTransactionModal({ isOpen, onClose, onSuccess }: I
                 </div>
                 <p className="text-lg font-medium text-gray-700 dark:text-gray-200">Click to upload Excel file</p>
                 <p className="text-sm text-gray-500 mt-2">Supports .xls and .xlsx</p>
-                <p className="text-xs text-gray-400 mt-1">Columns: Type, Fiat Amount, Price</p>
+                <p className="text-xs text-gray-400 mt-1">Supports: Bybit P2P export, generic Excel (Type/Direction, Price/Unit Price, Fiat Amount, Coin Amount)</p>
               </div>
             </div>
           )}
