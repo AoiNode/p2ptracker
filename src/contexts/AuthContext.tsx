@@ -50,7 +50,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     });
     
     if (error) throw error;
-    router.push('/');
+    router.push('/v2');
   };
 
   const signUp = async (email: string, password: string) => {

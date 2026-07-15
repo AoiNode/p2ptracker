@@ -27,7 +27,7 @@ export default function LoginPage() {
       if (error) throw error;
 
       if (data.user) {
-        router.push("/");
+        router.push("/v2");
       }
     } catch (error: any) {
       setError(error.message || "Terjadi kesalahan saat login");
