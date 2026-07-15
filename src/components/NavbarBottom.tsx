@@ -9,7 +9,7 @@ export default function NavbarBottom() {
   const { currentTheme, isDark } = useTheme();
   
   const isActive = (href: string) => {
-    if (href === '/') return path === '/';
+    if (href === '/v1') return path === '/v1';
     return path.startsWith(href);
   };
 
@@ -17,14 +17,14 @@ export default function NavbarBottom() {
   const navItems = [
     { href: '/sessions', icon: FileText, label: 'Sesi' },
     { href: '/transaksi', icon: Activity, label: 'Aktivitas' },
-    { href: '/', isCenter: true, label: 'Home' }, // Center placeholder
+    { href: '/v1', isCenter: true, label: 'Home' }, // Center placeholder
     { href: '/statistik', icon: BarChart3, label: 'Statistik' },
     { href: '/settings', icon: User, label: 'Settings' },
   ];
 
   // Center button (Beranda)
   const centerItem = { 
-    href: '/', 
+    href: '/v1', 
     iconKey: 'home' as const, 
     label: 'Beranda',
     centerText: currentTheme.name.substring(0, 2).toUpperCase()

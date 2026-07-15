@@ -37,7 +37,7 @@ export function middleware(request: NextRequest) {
 
   // Redirect to home if authenticated and trying to access login
   if (hasAuth && (pathname === '/login' || pathname === '/register')) {
-    return NextResponse.redirect(new URL('/', request.url));
+    return NextResponse.redirect(new URL('/v2', request.url));
   }
 
   return NextResponse.next();
