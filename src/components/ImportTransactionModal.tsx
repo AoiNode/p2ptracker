@@ -36,6 +36,7 @@ export default function ImportTransactionModal({ isOpen, onClose, onSuccess }: I
   const [previewProfit, setPreviewProfit] = useState<number | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const previewTableScrollRef = useRef<HTMLDivElement>(null);
+  const isImportingRef = useRef(false); // Hard lock against double-submit (mobile double-tap)
   
   const addBuySessionSmart = useSessionStore(s => s.addBuySessionSmart);
   const addSmartSell = useSessionStore(s => s.addSmartSell);
@@ -261,8 +262,15 @@ export default function ImportTransactionModal({ isOpen, onClose, onSuccess }: I
   };
 
   const handleImport = async () => {
+    // Hard guard: block re-entry from a second tap before React re-renders `step`.
+    // A useRef flips synchronously, so a double-tap can't fire two import loops
+    // (root cause of the rare 1-BUY-becomes-2x duplication).
+    if (isImportingRef.current) return;
+    isImportingRef.current = true;
+
     setStep('importing');
-    const selected = parsedData.filter(t => t.selected);
+    // Only import rows that are selected AND not duplicate/canceled.
+    const selected = parsedData.filter(t => t.selected && !t.isCanceled && t.status !== 'duplicate');
 
     for (const tx of selected) {
       try {
@@ -293,6 +301,7 @@ export default function ImportTransactionModal({ isOpen, onClose, onSuccess }: I
       setStep('upload');
       setParsedData([]);
       setFileName("");
+      isImportingRef.current = false; // Release lock for the next import
     }, 1500);
   };
 

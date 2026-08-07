@@ -19,6 +19,15 @@ type State = {
     activeCapital: number;
     monthlyProfit: number; // New
     todayProfit: number;   // New
+    // Server-computed dashboard totals (via get_dashboard_totals RPC).
+    totalInvested: number;
+    totalRealizedProfit: number;
+    remainingUsdt: number;
+    roi: number;
+    // True once get_dashboard_totals has returned successfully at least once.
+    // Components use this to decide between server numbers and the client-side
+    // fallback (computeSessionDashboard), so a failed/pending RPC never blanks the UI.
+    ready: boolean;
   };
 };
 
@@ -30,6 +39,7 @@ type Actions = {
   fetchAllSessions: () => Promise<void>;
   fetchStats: () => Promise<void>;
   fetchDashboardStats: () => Promise<void>; // New action
+  fetchDashboardTotals: () => Promise<void>; // Server-side dashboard totals (WIB-aware)
   getActiveSessions: () => Session[];
   setTargetMonthly: (target: number) => Promise<void>;
 };
@@ -48,7 +58,12 @@ export const useSessionStore = create<State & Actions>((set, get) => ({
     totalBuyVolume: 0,
     activeCapital: 0,
     monthlyProfit: 0,
-    todayProfit: 0
+    todayProfit: 0,
+    totalInvested: 0,
+    totalRealizedProfit: 0,
+    remainingUsdt: 0,
+    roi: 0,
+    ready: false
   },
   
   fetchStats: async () => {
@@ -91,6 +106,37 @@ export const useSessionStore = create<State & Actions>((set, get) => ({
       }));
     } else {
       console.warn("Failed to fetch dashboard stats", error);
+    }
+  },
+
+  // Server-side dashboard totals via get_dashboard_totals RPC.
+  // Postgres aggregates directly from base tables using WIB (Asia/Jakarta) day/month
+  // boundaries, so numbers match the old client-side computeSessionDashboard exactly
+  // but without downloading every row. On success, stats.ready flips true and the UI
+  // switches from the client fallback to these server numbers.
+  fetchDashboardTotals: async () => {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return;
+
+    const { data, error } = await supabase.rpc('get_dashboard_totals', { target_user_id: user.id });
+
+    if (!error && data) {
+      set(state => ({
+        stats: {
+          ...state.stats,
+          totalInvested: data.total_invested || 0,
+          totalRealizedProfit: data.total_realized_profit || 0,
+          remainingUsdt: data.remaining_usdt || 0,
+          monthlyProfit: data.monthly_profit || 0,
+          todayProfit: data.today_profit || 0,
+          roi: data.roi || 0,
+          ready: true
+        }
+      }));
+    } else {
+      // Leave stats.ready as-is (likely false) so the UI keeps using the client
+      // fallback instead of showing zeros. RPC not deployed yet == graceful degrade.
+      console.warn("Failed to fetch dashboard totals", error);
     }
   },
   
@@ -305,17 +351,16 @@ export const useSessionStore = create<State & Actions>((set, get) => ({
       set({ targetMonthly: parseInt(settingsData.setting_value) });
     }
     
-    // Build query for sessions - Strategy: 
-    // 1. Get ALL sessions where remaining_usdt > 0 (Active sessions from ANY time)
-    // 2. Get closed sessions only from the last 90 days (Recent history)
-    const ninetyDaysAgo = new Date();
-    ninetyDaysAgo.setDate(ninetyDaysAgo.getDate() - 90);
-    const ninetyDaysAgoStr = ninetyDaysAgo.toISOString();
-
+    // Load ALL sessions for the user (no time window).
+    // Rationale: the dashboard computes Total Profit & ROI from
+    // SUM(sessions.realized_profit_idr). The old 90-day window excluded old
+    // closed sessions, so realized profit from those (e.g. an old BUY lot that a
+    // recent FIFO SELL drew down) was silently dropped -> statistik undercounted
+    // and profit "disappeared" after a refetch. Personal-scale data (<10k rows)
+    // makes a full load safe.
     const { data: sessions } = await supabase.from("sessions")
       .select("*")
       .eq('user_id', user.id)
-      .or(`remaining_usdt.gt.0.00000001,created_at.gt.${ninetyDaysAgoStr}`)
       .order("created_at", { ascending: true })
       .limit(10000); 
     
@@ -327,25 +372,26 @@ export const useSessionStore = create<State & Actions>((set, get) => ({
       .order("tx_time", { ascending: false })
       .limit(50000); // Increased from 5000 to 50000 for full export support
     
-    // Fetch session_sales for the sessions we just fetched
-    const sessionIds = sessions?.map((s: Session) => s.id).filter(Boolean) || [];
-    let sales: SessionSale[] = [];
-    
-    if (sessionIds.length > 0) {
-      // Fetch sales related to these sessions
-      const { data: salesData } = await supabase.from("session_sales")
-        .select(`
-          *,
-          transactions!session_sales_tx_id_fkey (
-            id, price_idr, amount_usdt, total_idr, tx_time, type
-          )
-        `)
-        .in('session_id', sessionIds)
-        .order("created_at", { ascending: false })
-        .limit(50000); // Increased from 10000 to 50000
-      
-      sales = salesData || [];
-    }
+    // Fetch session_sales scoped by USER (via inner join on sessions), NOT by the
+    // filtered session subset above. Because of FIFO, a recent SELL can realize
+    // profit against an OLD, now-closed session (remaining_usdt = 0, created_at > 90d).
+    // That old session is excluded from the sessions query, so scoping sales to
+    // `sessionIds` would silently drop those sales -> monthly/today profit & statistik
+    // would disappear on the dashboard even though the SELL still shows in history.
+    // Scoping by user_id keeps every realized sale regardless of session status.
+    const { data: salesData } = await supabase.from("session_sales")
+      .select(`
+        *,
+        sessions!inner ( user_id ),
+        transactions!session_sales_tx_id_fkey (
+          id, price_idr, amount_usdt, total_idr, tx_time, type
+        )
+      `)
+      .eq('sessions.user_id', user.id)
+      .order("created_at", { ascending: false })
+      .limit(50000);
+
+    const sales: SessionSale[] = salesData || [];
 
     set({
       transactions: txs || [],
@@ -353,8 +399,13 @@ export const useSessionStore = create<State & Actions>((set, get) => ({
       sessionSales: sales || []
     });
     
-    // Also fetch stats for accuracy
-    await get().fetchStats();
+    // Also fetch server-side stats/totals for accuracy.
+    // fetchStats() feeds the legacy stats fields; fetchDashboardTotals() feeds the
+    // WIB-aware server totals the dashboard/statistik pages now prefer.
+    await Promise.all([
+      get().fetchStats(),
+      get().fetchDashboardTotals()
+    ]);
   },
 
   getActiveSessions: () => {
@@ -367,28 +418,26 @@ export const useSessionStore = create<State & Actions>((set, get) => ({
 }));
 
 export function computeSessionDashboard() {
-  const { sessions, transactions, sessionSales, targetMonthly } = useSessionStore.getState();
+  const { sessions, transactions, sessionSales, targetMonthly, stats } = useSessionStore.getState();
   const dashboardData = calculateDashboardStats(sessions, sessionSales, targetMonthly);
-  
-  // Calculate total sell from transactions
+
+  // Calculate total sell from transactions (kept client-side; cheap and only used for display)
   const totalSell = transactions
     .filter(t => t.type === 'SELL')
     .reduce((sum, t) => sum + t.total_idr, 0);
 
-  // Calculate saldo akhir (ending balance)
-  const saldoAkhir = dashboardData.totalInvestedIDR + dashboardData.totalRealizedProfit;
-  
   // Count active sessions
   // Fixed: use remaining_usdt > 0.00000001 check to match sessionManager and ensure sessions with residue stay active
   const activeSessionsCount = sessions.filter((s: Session) => s.status === 'active' || s.remaining_usdt > 0.00000001).length;
-  
-  // Calculate today's profit
+
+  // --- CLIENT-SIDE FALLBACK (used until server totals are ready) ---
+  // Today's profit computed on the device's local day boundary.
   const today = new Date();
   today.setHours(0, 0, 0, 0);
   const tomorrow = new Date(today);
   tomorrow.setDate(tomorrow.getDate() + 1);
-  
-  const todayProfit = sessionSales
+
+  const clientTodayProfit = sessionSales
     .filter(sale => {
       const anySale = sale as any;
       const dateSource = anySale.created_at || anySale.transactions?.tx_time;
@@ -398,16 +447,39 @@ export function computeSessionDashboard() {
     })
     .reduce((sum, sale) => sum + sale.profit_idr, 0);
 
+  // --- SOURCE SELECTION ---
+  // Prefer the server-computed totals (get_dashboard_totals RPC) once ready: they
+  // aggregate every row in Postgres using WIB boundaries, so nothing is dropped by a
+  // client fetch window and it scales regardless of transaction count. If the RPC
+  // hasn't returned yet (or failed / not deployed), transparently fall back to the
+  // client math so the UI never shows zeros or goes blank.
+  const useServer = stats.ready;
+
+  const totalBuy       = useServer ? stats.totalInvested       : dashboardData.totalInvestedIDR;
+  const realizedProfit = useServer ? stats.totalRealizedProfit : dashboardData.totalRealizedProfit;
+  const monthlyPL      = useServer ? stats.monthlyProfit       : dashboardData.monthlyProfit;
+  const todayPL        = useServer ? stats.todayProfit         : clientTodayProfit;
+  const roi            = useServer ? stats.roi                 : dashboardData.roi;
+  const capitalUSDT    = useServer ? stats.remainingUsdt       : dashboardData.totalRemainingUSDT;
+
+  // Saldo akhir (ending balance) = modal + profit terealisasi.
+  const saldoAkhir = totalBuy + realizedProfit;
+
+  // Monthly target achievement recomputed from the chosen monthlyPL for consistency.
+  const progress = targetMonthly > 0
+    ? (monthlyPL >= targetMonthly ? 100 : (monthlyPL / targetMonthly) * 100)
+    : 0;
+
   return {
-    totalBuy: dashboardData.totalInvestedIDR,
+    totalBuy,
     totalSell,
-    monthlyPL: dashboardData.monthlyProfit,
-    todayPL: todayProfit,
-    roi: dashboardData.roi,
+    monthlyPL,
+    todayPL,
+    roi,
     saldoAkhir,
     targetMonthly,
-    progress: dashboardData.monthlyTargetAchievement,
-    capitalUSDT: dashboardData.totalRemainingUSDT,
+    progress,
+    capitalUSDT,
     activeSessionsCount
   };
 }
