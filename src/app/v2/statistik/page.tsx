@@ -21,6 +21,8 @@ export default function V2Stats() {
   const [monthlyHistory, setMonthlyHistory] = useState<any[]>([]);
   const [selectedYear, setSelectedYear] = useState(new Date().getFullYear());
   const [selectedSummaryMonth, setSelectedSummaryMonth] = useState<string>("all");
+  // Bar tapped in the "Profit 7 Hari Terakhir" chart (YYYY-MM-DD), or null.
+  const [selectedDay, setSelectedDay] = useState<string | null>(null);
   const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun', 'Jul', 'Agu', 'Sep', 'Okt', 'Nov', 'Des'];
 
   useEffect(() => {
@@ -148,26 +150,70 @@ export default function V2Stats() {
 
       {/* Daily Profit Chart (Last 7 Days) */}
       <div className="bg-[#111827] rounded-xl p-4 border border-white/[0.06] mb-4">
-        <h3 className="text-sm font-semibold text-gray-300 mb-4">Profit 7 Hari Terakhir</h3>
+        <div className="flex items-center justify-between mb-4">
+          <h3 className="text-sm font-semibold text-gray-300">Profit 7 Hari Terakhir</h3>
+          <span className="text-[10px] text-gray-600">Ketuk batang untuk detail</span>
+        </div>
         <div className="flex items-end gap-1.5 h-32">
           {dailyProfit.map(([date, profit]) => {
             const height = Math.max(4, (Math.abs(profit) / maxDailyProfit) * 100);
             const isPositive = profit >= 0;
+            const isSelected = selectedDay === date;
             return (
-              <div key={date} className="flex-1 flex flex-col items-center gap-1">
+              <button
+                type="button"
+                key={date}
+                onClick={() => setSelectedDay(isSelected ? null : date)}
+                className="flex-1 flex flex-col items-center gap-1 cursor-pointer group focus:outline-none"
+              >
                 <div className="w-full flex items-end justify-center" style={{ height: "100px" }}>
-                  <div 
-                    className={`w-full rounded-t-md transition-all duration-500 ${
+                  <div
+                    className={`w-full rounded-t-md transition-all duration-300 ${
                       isPositive ? "bg-emerald-500/60" : "bg-red-500/60"
+                    } ${
+                      isSelected
+                        ? "ring-2 ring-emerald-400 ring-offset-1 ring-offset-[#111827] brightness-125"
+                        : "group-active:brightness-110"
                     }`}
                     style={{ height: `${height}%` }}
                   />
                 </div>
-                <span className="text-[8px] text-gray-600">{dayjs(date).format("dd")}</span>
-              </div>
+                <span className={`text-[8px] transition-colors ${isSelected ? "text-emerald-400 font-bold" : "text-gray-600"}`}>
+                  {dayjs(date).format("dd")}
+                </span>
+              </button>
             );
           })}
         </div>
+
+        {/* Detail hari yang dipilih */}
+        {selectedDay && (() => {
+          const dayProfit = dailyProfit.find(([d]) => d === selectedDay)?.[1] ?? 0;
+          const daySales = sessionSales.filter(
+            (sale) => dayjs(sale.created_at).format("YYYY-MM-DD") === selectedDay
+          );
+          return (
+            <div className="mt-3 bg-[#0a0e1a] rounded-xl px-3.5 py-3 border border-white/[0.06] animate-in fade-in slide-in-from-top-1 duration-200">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-xs font-bold text-gray-200">
+                    {dayjs(selectedDay).format("dddd, DD MMM YYYY")}
+                  </p>
+                  <p className="text-[10px] text-gray-500 mt-0.5">
+                    {daySales.length} transaksi jual
+                  </p>
+                </div>
+                <div className="text-right">
+                  <p className="text-[10px] text-gray-500">Profit</p>
+                  <p className={`text-sm font-bold ${dayProfit >= 0 ? "text-emerald-400" : "text-red-400"}`}>
+                    {formatIDR(dayProfit)}
+                  </p>
+                </div>
+              </div>
+            </div>
+          );
+        })()}
+
         <div className="flex justify-between mt-2">
           <span className="text-[10px] text-gray-600">Hari ini: {formatIDR(s.todayPL)}</span>
           <span className="text-[10px] text-gray-600">Bulan: {formatIDR(s.monthlyPL)}</span>
