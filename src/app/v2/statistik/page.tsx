@@ -192,15 +192,23 @@ export default function V2Stats() {
           const daySales = sessionSales.filter(
             (sale) => dayjs(sale.created_at).format("YYYY-MM-DD") === selectedDay
           );
+          // Total buy/sell that day, from raw transactions.
+          const dayTxs = transactions.filter(
+            (t) => dayjs(t.tx_time).format("YYYY-MM-DD") === selectedDay
+          );
+          const dayBuy = dayTxs.filter((t) => t.type === "BUY").reduce((sum, t) => sum + t.total_idr, 0);
+          const daySell = dayTxs.filter((t) => t.type === "SELL").reduce((sum, t) => sum + t.total_idr, 0);
+          const buyCount = dayTxs.filter((t) => t.type === "BUY").length;
+          const sellCount = dayTxs.filter((t) => t.type === "SELL").length;
           return (
             <div className="mt-3 bg-[#0a0e1a] rounded-xl px-3.5 py-3 border border-white/[0.06] animate-in fade-in slide-in-from-top-1 duration-200">
-              <div className="flex items-center justify-between">
+              <div className="flex items-center justify-between mb-3">
                 <div>
                   <p className="text-xs font-bold text-gray-200">
                     {dayjs(selectedDay).format("dddd, DD MMM YYYY")}
                   </p>
                   <p className="text-[10px] text-gray-500 mt-0.5">
-                    {daySales.length} transaksi jual
+                    {dayTxs.length} transaksi
                   </p>
                 </div>
                 <div className="text-right">
@@ -208,6 +216,24 @@ export default function V2Stats() {
                   <p className={`text-sm font-bold ${dayProfit >= 0 ? "text-emerald-400" : "text-red-400"}`}>
                     {formatIDR(dayProfit)}
                   </p>
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-2">
+                <div className="bg-emerald-500/[0.07] border border-emerald-500/15 rounded-lg px-3 py-2">
+                  <div className="flex items-center gap-1.5 mb-0.5">
+                    <ArrowDownLeft className="w-3 h-3 text-emerald-400" />
+                    <span className="text-[10px] text-gray-400">Total Beli</span>
+                  </div>
+                  <p className="text-xs font-bold text-emerald-400">{formatIDR(dayBuy)}</p>
+                  <p className="text-[9px] text-gray-600 mt-0.5">{buyCount} transaksi</p>
+                </div>
+                <div className="bg-red-500/[0.07] border border-red-500/15 rounded-lg px-3 py-2">
+                  <div className="flex items-center gap-1.5 mb-0.5">
+                    <ArrowUpRight className="w-3 h-3 text-red-400" />
+                    <span className="text-[10px] text-gray-400">Total Jual</span>
+                  </div>
+                  <p className="text-xs font-bold text-red-400">{formatIDR(daySell)}</p>
+                  <p className="text-[9px] text-gray-600 mt-0.5">{sellCount} transaksi</p>
                 </div>
               </div>
             </div>
