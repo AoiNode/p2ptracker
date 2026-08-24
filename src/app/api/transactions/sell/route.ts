@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { processSmartFIFOSell } from "@/lib/sessionManager";
+import { fetchAllPages } from "@/lib/dataScale";
 
 type SessionRow = {
   id: string;
@@ -38,15 +39,17 @@ export async function POST(req: NextRequest) {
     if (!Number.isFinite(fee_idr) || fee_idr < 0) return NextResponse.json({ error: "Invalid fee" }, { status: 400 });
     if (!tx_time) return NextResponse.json({ error: "Invalid tx_time" }, { status: 400 });
 
-    const { data: sessions, error: sessionsError } = await supabase
+    // A large import can create more than PostgREST's default 1,000-row response cap.
+    // Fetch every active FIFO source explicitly or a SELL could ignore newer lots.
+    const sessions = await fetchAllPages<SessionRow>((from, to) => supabase
       .from("sessions")
       .select("id, created_at, avg_cost, remaining_usdt, realized_profit_idr, status")
       .eq("user_id", user.id)
       .gt("remaining_usdt", 0.00000001)
-      .order("created_at", { ascending: true });
+      .order("created_at", { ascending: true })
+      .range(from, to));
 
-    if (sessionsError) return NextResponse.json({ error: sessionsError.message }, { status: 500 });
-    if (!sessions || sessions.length === 0) return NextResponse.json({ error: "Tidak ada sesi aktif untuk dijual" }, { status: 400 });
+    if (sessions.length === 0) return NextResponse.json({ error: "Tidak ada sesi aktif untuk dijual" }, { status: 400 });
 
     const totalAvailable = (sessions as SessionRow[]).reduce((sum, s) => sum + Number(s.remaining_usdt || 0), 0);
     if (totalAvailable + 0.00000001 < sold_usdt) {

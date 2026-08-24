@@ -275,11 +275,11 @@ export default function ImportTransactionModal({ isOpen, onClose, onSuccess }: I
     for (const tx of selected) {
       try {
         if (tx.type === 'BUY') {
-          await addBuySessionSmart(tx.price, tx.fiatAmount, tx.date, selectedLabel);
+          await addBuySessionSmart(tx.price, tx.fiatAmount, tx.date, selectedLabel, undefined, false);
         } else {
           // For SELL, we use Smart Sell logic
           // Note: addSmartSell takes sold_usdt, price_idr, date, fee, feeType, label
-          await addSmartSell(tx.usdtAmount, tx.price, tx.date, 0, 'percent', selectedLabel);
+          await addSmartSell(tx.usdtAmount, tx.price, tx.date, 0, 'percent', selectedLabel, false);
         }
         
         setParsedData(prev => prev.map(p => p.id === tx.id ? { ...p, status: 'success' } : p));

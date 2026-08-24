@@ -7,6 +7,7 @@ import { formatIDR } from "@/lib/utils";
 import { Transaction, Session, SessionSale, ExchangeLabel } from "@/lib/types";
 import { deleteTransaction } from "@/lib/transactionService";
 import { supabase } from "@/lib/supabaseClient";
+import { deriveSaleSource } from "@/lib/dataScale";
 import EditTransactionModal from "@/components/EditTransactionModal";
 import dayjs from "dayjs";
 import "dayjs/locale/id";
@@ -88,18 +89,16 @@ export default function V2TransactionDetail() {
     try {
       const { data: sales } = await supabase
         .from('session_sales')
-        .select('*')
+        .select('*, sessions(created_at, avg_cost, price_idr)')
         .eq('tx_id', transaction.id);
       
       if (sales && sales.length > 0) {
         const details = sales.map((sale: any) => {
-          const session = sessions.find(s => s.id === sale.session_id);
+          const joined = Array.isArray(sale.sessions) ? sale.sessions[0] : sale.sessions;
+          const source = deriveSaleSource(sale, joined || sessions.find(s => s.id === sale.session_id));
           return {
-            sessionDate: session ? dayjs(session.created_at).format('DD MMM YYYY') : '-',
-            usdt: sale.sold_usdt,
-            profit: sale.profit_idr,
-            cost: sale.cost_idr,
-            avgCost: session?.avg_cost || 0,
+            ...source,
+            sessionDate: source.sessionDate === '-' ? '-' : dayjs(source.sessionDate).format('DD MMM YYYY'),
             proceeds: sale.proceeds_idr
           };
         });

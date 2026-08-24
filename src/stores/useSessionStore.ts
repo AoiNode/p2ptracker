@@ -3,6 +3,7 @@ import { create } from "zustand";
 import { supabase } from "@/lib/supabaseClient";
 import { Session, SessionSale, Transaction, LotMatch, BuyLot, ExchangeLabel } from "@/lib/types";
 import { createSession, processSellForSession, processSmartFIFOSell, computeSessionDashboard as calculateDashboardStats } from "@/lib/sessionManager";
+import { fetchAllPages } from "@/lib/dataScale";
 
 type State = {
   transactions: Transaction[];
@@ -33,9 +34,9 @@ type State = {
 
 type Actions = {
   addBuySession: (price_idr: number, total_idr: number, dt?: Date, label?: ExchangeLabel, base_idr?: number) => Promise<void>;
-  addBuySessionSmart: (price_idr: number, total_idr: number, dt?: Date, label?: ExchangeLabel, base_idr?: number) => Promise<void>;
+  addBuySessionSmart: (price_idr: number, total_idr: number, dt?: Date, label?: ExchangeLabel, base_idr?: number, refresh?: boolean) => Promise<void>;
   addSellSession: (session_id: string, price_idr: number, sold_usdt: number, dt?: Date, label?: ExchangeLabel) => Promise<void>;
-  addSmartSell: (sold_usdt: number, price_idr: number, dt?: Date, fee?: number, feeType?: 'percent' | 'value', label?: ExchangeLabel) => Promise<void>;
+  addSmartSell: (sold_usdt: number, price_idr: number, dt?: Date, fee?: number, feeType?: 'percent' | 'value', label?: ExchangeLabel, refresh?: boolean) => Promise<void>;
   fetchAllSessions: () => Promise<void>;
   fetchStats: () => Promise<void>;
   fetchDashboardStats: () => Promise<void>; // New action
@@ -163,7 +164,7 @@ export const useSessionStore = create<State & Actions>((set, get) => ({
     }
   },
 
-  addBuySessionSmart: async (price_idr: number, total_idr: number, dt?: Date, label?: ExchangeLabel, base_idr?: number) => {
+  addBuySessionSmart: async (price_idr: number, total_idr: number, dt?: Date, label?: ExchangeLabel, base_idr?: number, refresh = true) => {
     const tx_time = (dt || new Date()).toISOString();
     // For Tokocrypto BUY: calculate from base_idr and reduce by 0.0222%
     // For others: use total_idr as usual
@@ -213,7 +214,7 @@ export const useSessionStore = create<State & Actions>((set, get) => ({
       const body = await res.json();
       if (!res.ok) throw new Error(body.error || 'Gagal menyimpan BUY');
 
-      await get().fetchAllSessions();
+      if (refresh) await get().fetchAllSessions();
     } catch (error) {
       console.error('Error adding buy session:', error);
       throw error;
@@ -290,7 +291,7 @@ export const useSessionStore = create<State & Actions>((set, get) => ({
     });
   },
 
-  addSmartSell: async (sold_usdt: number, price_idr: number, dt = new Date(), fee = 0, feeType: 'percent' | 'value' = 'percent', label?: ExchangeLabel) => {
+  addSmartSell: async (sold_usdt: number, price_idr: number, dt = new Date(), fee = 0, feeType: 'percent' | 'value' = 'percent', label?: ExchangeLabel, refresh = true) => {
     const tx_time = dt.toISOString();
     
     // Get current user
@@ -324,8 +325,10 @@ export const useSessionStore = create<State & Actions>((set, get) => ({
       const body = await res.json();
       if (!res.ok) throw new Error(body.error || 'Gagal menyimpan SELL');
 
-      await get().fetchAllSessions();
-      await get().fetchDashboardStats();
+      if (refresh) {
+        await get().fetchAllSessions();
+        await get().fetchDashboardStats();
+      }
       return;
 
     } catch (error: any) {
@@ -358,46 +361,34 @@ export const useSessionStore = create<State & Actions>((set, get) => ({
     // recent FIFO SELL drew down) was silently dropped -> statistik undercounted
     // and profit "disappeared" after a refetch. Personal-scale data (<10k rows)
     // makes a full load safe.
-    const { data: sessions } = await supabase.from("sessions")
-      .select("*")
-      .eq('user_id', user.id)
-      .order("created_at", { ascending: true })
-      .limit(10000); 
-    
-    // Build query for transactions - limited to last 1000 for performance, 
-    // but ensured to cover the active session range
-    const { data: txs } = await supabase.from("transactions")
-      .select("*")
-      .eq('user_id', user.id)
-      .order("tx_time", { ascending: false })
-      .limit(50000); // Increased from 5000 to 50000 for full export support
-    
-    // Fetch session_sales scoped by USER (via inner join on sessions), NOT by the
-    // filtered session subset above. Because of FIFO, a recent SELL can realize
-    // profit against an OLD, now-closed session (remaining_usdt = 0, created_at > 90d).
-    // That old session is excluded from the sessions query, so scoping sales to
-    // `sessionIds` would silently drop those sales -> monthly/today profit & statistik
-    // would disappear on the dashboard even though the SELL still shows in history.
-    // Scoping by user_id keeps every realized sale regardless of session status.
-    const { data: salesData } = await supabase.from("session_sales")
-      .select(`
-        *,
-        sessions!inner ( user_id ),
-        transactions!session_sales_tx_id_fkey (
-          id, price_idr, amount_usdt, total_idr, tx_time, type
-        )
-      `)
-      .eq('sessions.user_id', user.id)
-      .order("created_at", { ascending: false })
-      .limit(50000);
+    // PostgREST commonly caps each response at 1,000 rows even when .limit(10000)
+    // is requested. Explicit pagination prevents sessions/USDT from disappearing
+    // once an account grows beyond that cap.
+    const [sessions, txs, sales] = await Promise.all([
+      fetchAllPages<Session>((from, to) => supabase.from("sessions")
+        .select("*")
+        .eq('user_id', user.id)
+        .order("created_at", { ascending: true })
+        .range(from, to)),
+      fetchAllPages<Transaction>((from, to) => supabase.from("transactions")
+        .select("*")
+        .eq('user_id', user.id)
+        .order("tx_time", { ascending: false })
+        .range(from, to)),
+      fetchAllPages<SessionSale>((from, to) => supabase.from("session_sales")
+        .select(`
+          *,
+          sessions!inner ( user_id ),
+          transactions!session_sales_tx_id_fkey (
+            id, price_idr, amount_usdt, total_idr, tx_time, type
+          )
+        `)
+        .eq('sessions.user_id', user.id)
+        .order("created_at", { ascending: false })
+        .range(from, to))
+    ]);
 
-    const sales: SessionSale[] = salesData || [];
-
-    set({
-      transactions: txs || [],
-      sessions: sessions || [],
-      sessionSales: sales || []
-    });
+    set({ transactions: txs, sessions, sessionSales: sales });
     
     // Also fetch server-side stats/totals for accuracy.
     // fetchStats() feeds the legacy stats fields; fetchDashboardTotals() feeds the

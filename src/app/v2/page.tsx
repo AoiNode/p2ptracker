@@ -49,6 +49,7 @@ export default function V2Dashboard() {
     const costPerUsdt = sess.avg_cost || sess.price_idr || 0;
     return sum + (sess.remaining_usdt * costPerUsdt);
   }, 0);
+  const remainingUSDT = s.capitalUSDT;
 
   return (
     <div className="px-4 pt-6 pb-4">
@@ -112,7 +113,7 @@ export default function V2Dashboard() {
         <div className="bg-[#111827] rounded-xl p-3 border border-white/[0.06]">
           <Wallet className="w-4 h-4 text-blue-400 mb-1.5" />
           <p className="text-[10px] text-gray-500 mb-0.5">Sisa USDT</p>
-          <p className="text-xs font-bold text-white">{activeSessions.reduce((sum, sess) => sum + sess.remaining_usdt, 0).toFixed(2)}</p>
+          <p className="text-xs font-bold text-white">{remainingUSDT.toFixed(2)}</p>
         </div>
         <div className="bg-[#111827] rounded-xl p-3 border border-white/[0.06]">
           <Layers className="w-4 h-4 text-purple-400 mb-1.5" />
