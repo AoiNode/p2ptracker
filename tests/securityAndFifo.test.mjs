@@ -22,7 +22,7 @@ test('atomic financial RPCs are service-role only', async () => {
   assert.match(sql, /REVOKE ALL ON FUNCTION process_buy_transaction_v2[\s\S]*FROM PUBLIC, anon, authenticated/i);
   assert.match(sql, /GRANT EXECUTE ON FUNCTION process_buy_transaction_v2[\s\S]*TO service_role/i);
   assert.match(sql, /REVOKE ALL ON FUNCTION process_sell_transaction_v2[\s\S]*FROM PUBLIC, anon, authenticated/i);
-  assert.match(sql, /REVOKE ALL ON FUNCTION process_sell_transaction\([\s\S]*FROM PUBLIC, anon, authenticated/i);
+  assert.match(sql, /to_regprocedure\('public\.process_sell_transaction[\s\S]*REVOKE ALL ON FUNCTION public\.process_sell_transaction[\s\S]*FROM PUBLIC, anon, authenticated/i);
 });
 
 test('SELL API treats an RPC success:false payload as a failed request', async () => {

@@ -152,16 +152,21 @@ GRANT EXECUTE ON FUNCTION process_sell_transaction_v2(UUID, NUMERIC, NUMERIC, TI
 
 -- Legacy RPCs remain only as a temporary server-side fallback during rollout.
 -- Prevent direct browser calls from bypassing the v2 historical FIFO rules.
-REVOKE ALL ON FUNCTION process_buy_transaction(UUID, NUMERIC, NUMERIC, NUMERIC, TIMESTAMPTZ, TEXT) FROM PUBLIC, anon, authenticated;
-GRANT EXECUTE ON FUNCTION process_buy_transaction(UUID, NUMERIC, NUMERIC, NUMERIC, TIMESTAMPTZ, TEXT) TO service_role;
-REVOKE ALL ON FUNCTION process_sell_transaction(UUID, NUMERIC, NUMERIC, TIMESTAMPTZ, TEXT, NUMERIC) FROM PUBLIC, anon, authenticated;
-GRANT EXECUTE ON FUNCTION process_sell_transaction(UUID, NUMERIC, NUMERIC, TIMESTAMPTZ, TEXT, NUMERIC) TO service_role;
+DO $$
+BEGIN
+  IF to_regprocedure('public.process_buy_transaction(uuid,numeric,numeric,numeric,timestamptz,text)') IS NOT NULL THEN
+    EXECUTE 'REVOKE ALL ON FUNCTION public.process_buy_transaction(UUID, NUMERIC, NUMERIC, NUMERIC, TIMESTAMPTZ, TEXT) FROM PUBLIC, anon, authenticated';
+    EXECUTE 'GRANT EXECUTE ON FUNCTION public.process_buy_transaction(UUID, NUMERIC, NUMERIC, NUMERIC, TIMESTAMPTZ, TEXT) TO service_role';
+  END IF;
+  IF to_regprocedure('public.process_sell_transaction(uuid,numeric,numeric,timestamptz,text,numeric)') IS NOT NULL THEN
+    EXECUTE 'REVOKE ALL ON FUNCTION public.process_sell_transaction(UUID, NUMERIC, NUMERIC, TIMESTAMPTZ, TEXT, NUMERIC) FROM PUBLIC, anon, authenticated';
+    EXECUTE 'GRANT EXECUTE ON FUNCTION public.process_sell_transaction(UUID, NUMERIC, NUMERIC, TIMESTAMPTZ, TEXT, NUMERIC) TO service_role';
+  END IF;
+END;
+$$;
 
 -- Dashboard aggregate is called directly by authenticated clients. Enforce that
 -- callers can only request their own totals; anonymous execution is forbidden.
-REVOKE EXECUTE ON FUNCTION get_dashboard_totals(UUID) FROM PUBLIC, anon;
-GRANT EXECUTE ON FUNCTION get_dashboard_totals(UUID) TO authenticated, service_role;
-
 CREATE OR REPLACE FUNCTION assert_dashboard_owner(target_user_id UUID)
 RETURNS VOID
 LANGUAGE plpgsql
@@ -225,7 +230,15 @@ GRANT EXECUTE ON FUNCTION get_dashboard_totals(UUID) TO authenticated, service_r
 
 -- Destructive maintenance procedures are only invoked by authenticated API routes
 -- through a service-role client. Remove direct browser access entirely.
-REVOKE ALL ON FUNCTION archive_closed_data_v2(UUID) FROM PUBLIC, anon, authenticated;
-GRANT EXECUTE ON FUNCTION archive_closed_data_v2(UUID) TO service_role;
-REVOKE ALL ON FUNCTION monthly_close_reset_v1(UUID) FROM PUBLIC, anon, authenticated;
-GRANT EXECUTE ON FUNCTION monthly_close_reset_v1(UUID) TO service_role;
+DO $$
+BEGIN
+  IF to_regprocedure('public.archive_closed_data_v2(uuid)') IS NOT NULL THEN
+    EXECUTE 'REVOKE ALL ON FUNCTION public.archive_closed_data_v2(UUID) FROM PUBLIC, anon, authenticated';
+    EXECUTE 'GRANT EXECUTE ON FUNCTION public.archive_closed_data_v2(UUID) TO service_role';
+  END IF;
+  IF to_regprocedure('public.monthly_close_reset_v1(uuid)') IS NOT NULL THEN
+    EXECUTE 'REVOKE ALL ON FUNCTION public.monthly_close_reset_v1(UUID) FROM PUBLIC, anon, authenticated';
+    EXECUTE 'GRANT EXECUTE ON FUNCTION public.monthly_close_reset_v1(UUID) TO service_role';
+  END IF;
+END;
+$$;
