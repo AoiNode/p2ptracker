@@ -369,11 +369,13 @@ export const useSessionStore = create<State & Actions>((set, get) => ({
         .select("*")
         .eq('user_id', user.id)
         .order("created_at", { ascending: true })
+        .order("id", { ascending: true })
         .range(from, to)),
       fetchAllPages<Transaction>((from, to) => supabase.from("transactions")
         .select("*")
         .eq('user_id', user.id)
         .order("tx_time", { ascending: false })
+        .order("id", { ascending: false })
         .range(from, to)),
       fetchAllPages<SessionSale>((from, to) => supabase.from("session_sales")
         .select(`
@@ -385,6 +387,7 @@ export const useSessionStore = create<State & Actions>((set, get) => ({
         `)
         .eq('sessions.user_id', user.id)
         .order("created_at", { ascending: false })
+        .order("id", { ascending: false })
         .range(from, to))
     ]);
 

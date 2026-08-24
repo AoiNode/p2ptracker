@@ -7,13 +7,20 @@ const withPWA = require('next-pwa')({
   buildExcludes: [/middleware-manifest\.json$/],
   runtimeCaching: [
     {
-      urlPattern: /^https?.*/,
+      // Financial/API responses must never enter the service-worker cache.
+      urlPattern: ({ url, request }) => {
+        if (request.method !== 'GET') return false;
+        if (url.pathname.startsWith('/api/')) return false;
+        if (url.hostname.includes('supabase')) return false;
+        return url.origin === self.location.origin;
+      },
       handler: 'NetworkFirst',
       options: {
-        cacheName: 'offlineCache',
+        cacheName: 'page-cache',
+        networkTimeoutSeconds: 3,
         expiration: {
-          maxEntries: 200,
-          maxAgeSeconds: 30 * 24 * 60 * 60, // 30 days
+          maxEntries: 40,
+          maxAgeSeconds: 24 * 60 * 60,
         },
       },
     },
